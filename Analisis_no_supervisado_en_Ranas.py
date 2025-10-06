@@ -1,101 +1,105 @@
 # ===================================================================
-# SCRIPT DE ANÁLISIS BIOACÚSTICO NO SUPERVISADO PARA ANFIBIOS EN PYTHON
+# SCRIPT DE ANÁLISIS BIOACÚSTICO NO SUPERVISADO (VERSIÓN KAGGLE)
 # Workflow: Preprocesamiento -> Segmentación -> MFCCs -> UMAP -> HDBSCAN
 # ===================================================================
 
-# --- Parte 1: Importar Librerías (Versión Mejorada) ---
-# Librerías estándar de Python
+# --- Parte 1: Importar Librerías ---
 import os
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
-# Librerías de manipulación de datos y computación científica
 import numpy as np
 import pandas as pd
-from scipy.io import wavfile
 from scipy import signal
-import soundfile as sf # ¡NUEVO! Para leer archivos .flac de Kaggle
-
-# Librerías de análisis de audio y Machine Learning
+import soundfile as sf  # Para leer .wav y .flac
 import librosa
 import umap
 import hdbscan
-import noisereduce as nr # ¡NUEVO! Para la reducción de ruido
+import noisereduce as nr # Para la reducción de ruido
 from sklearn.preprocessing import StandardScaler
-
-# Librerías de visualización y utilidades
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
 
 # ===================================================================
-# --- Parte 2: Configuración Principal ---
+# --- Parte 2: Configuración Principal (Adaptada para Kaggle) ---
 # ===================================================================
 
-# --- Parte 2: Configuración para Kaggle ---
-# Los datos de la competencia están en esta carpeta
+# --- Rutas para el entorno de Kaggle ---
 ruta_carpeta_audio = Path("/kaggle/input/rfcx-species-audio-detection/train")
-
-# Tus resultados se guardarán aquí
 ruta_carpeta_salida = Path("/kaggle/working/salida_analisis")
 
-
-# --- Parámetros de Preprocesamiento y Segmentación ---
+# --- Parámetros de Análisis ---
 DURACION_SEGMENTO_SEG = 4
 LIMITE_INFERIOR_HZ = 700
 LIMITE_SUPERIOR_HZ = 2500
-
-# --- Parámetros de Extracción de Características ---
 NUM_MFCC = 20
-
-# --- Parámetros de Clustering ---
 UMAP_N_NEIGHBORS = 15
 UMAP_MIN_DIST = 0.1
 HDBSCAN_MIN_PTS = 20
-
-# --- Parámetros de Procesamiento Paralelo ---
-# os.cpu_count() es el equivalente a availableCores()
 NUM_WORKERS = os.cpu_count() - 2 if os.cpu_count() > 2 else 1
 
 # ===================================================================
-# --- Parte 3: Función de Procesamiento ---
+# --- Parte 3: Funciones de Procesamiento ---
 # ===================================================================
 
-# --- Función procesar_segmento (Mejorada) ---
 def procesar_segmento(segmento, frecuencia_muestreo):
+    """
+    Toma un segmento de audio, lo filtra, reduce el ruido y extrae características MFCC.
+    """
     try:
-        # Filtro Butterworth
         nyquist = 0.5 * frecuencia_muestreo
         b, a = signal.butter(4, [LIMITE_INFERIOR_HZ / nyquist, LIMITE_SUPERIOR_HZ / nyquist], btype='band')
         sonido_filtrado = signal.filtfilt(b, a, segmento).astype(np.float32)
 
-        # Reducción de Ruido Espectral
         sonido_reducido = nr.reduce_noise(y=sonido_filtrado, sr=frecuencia_muestreo, stationary=True)
 
-        # Extracción de MFCCs
         mfccs = librosa.feature.mfcc(y=sonido_reducido, sr=frecuencia_muestreo, n_mfcc=NUM_MFCC)
         
-        # Vector de Características
         return np.hstack([np.mean(mfccs, axis=1), np.std(mfccs, axis=1)])
     except Exception:
         return None
 
-# --- Función procesar_archivo (Mejorada para Kaggle) ---
 def procesar_archivo(ruta_archivo):
+    """
+    Lee un archivo de audio (.wav o .flac), lo segmenta y procesa cada segmento.
+    """
     try:
-        # ¡CAMBIO CLAVE! Usamos soundfile para leer .wav o .flac
         audio_completo, frecuencia_muestreo = sf.read(ruta_archivo)
         
-        # Si el audio es estéreo, lo convertimos a mono
         if audio_completo.ndim > 1:
             audio_completo = audio_completo.mean(axis=1)
 
-        # (El resto de la función se mantiene igual...)
-        # ...
+        duracion_total = len(audio_completo) / frecuencia_muestreo
+        if duracion_total < DURACION_SEGMENTO_SEG:
+            return None
+            
+        resultados_archivo = []
+        inicios = np.arange(0, duracion_total - DURACION_SEGMENTO_SEG, DURACION_SEGMENTO_SEG)
+        
+        for t_inicio in inicios:
+            start_sample = int(t_inicio * frecuencia_muestreo)
+            end_sample = int((t_inicio + DURACION_SEGMENTO_SEG) * frecuencia_muestreo)
+            segmento = audio_completo[start_sample:end_sample]
+            
+            vector_caracteristicas = procesar_segmento(segmento, frecuencia_muestreo)
+            
+            if vector_caracteristicas is not None:
+                info_segmento = {
+                    'archivo_origen': ruta_archivo.name,
+                    'tiempo_inicio': t_inicio,
+                    'tiempo_fin': t_inicio + DURACION_SEGMENTO_SEG
+                }
+                nombres_features = [f'mfcc_mean_{i+1}' for i in range(NUM_MFCC)] + \
+                                   [f'mfcc_sd_{i+1}' for i in range(NUM_MFCC)]
+                
+                fila_resultado = {**info_segmento, **dict(zip(nombres_features, vector_caracteristicas))}
+                resultados_archivo.append(fila_resultado)
+        
         return pd.DataFrame(resultados_archivo)
     except Exception as e:
         print(f"\nERROR al procesar el archivo {ruta_archivo.name}: {e}")
         return None
+
 # ===================================================================
 # --- Parte 4: Script Principal - Orquestador del Análisis ---
 # ===================================================================
@@ -108,20 +112,22 @@ if __name__ == '__main__':
     
     print(f"Configurado para usar {NUM_WORKERS} núcleos de CPU.")
     
-    # Localizar todos los archivos de audio de forma recursiva
-    lista_archivos = list(ruta_carpeta_audio.rglob("*.wav"))
+    # Localizar todos los archivos de audio, tanto .wav como .flac
+    lista_archivos_wav = list(ruta_carpeta_audio.rglob("*.wav"))
+    lista_archivos_flac = list(ruta_carpeta_audio.rglob("*.flac"))
+    lista_archivos = lista_archivos_wav + lista_archivos_flac
     print(f"Se encontraron {len(lista_archivos)} archivos de audio para procesar.")
 
     lista_global_resultados = []
 
-    # --- B. Bucle de Depuración (SIN PARALELISMO) ---
-    print("\n--- EJECUTANDO EN MODO DE DEPURACIÓN (SIN PARALELISMO) PARA ENCONTRAR ARCHIVOS GRANDES ---\n")
-    
-    # Usamos un bucle simple en lugar del ProcessPoolExecutor
-    for ruta_archivo in tqdm(lista_archivos, desc="Procesando archivos (modo secuencial)"):
-        resultado_df = procesar_archivo(ruta_archivo)
-        if resultado_df is not None and not resultado_df.empty:
-            lista_global_resultados.append(resultado_df)
+    # --- B. Procesamiento Paralelo ---
+    with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
+        futuros = {executor.submit(procesar_archivo, ruta): ruta for ruta in lista_archivos}
+        
+        for futuro in tqdm(as_completed(futuros), total=len(lista_archivos), desc="Procesando archivos"):
+            resultado_df = futuro.result()
+            if resultado_df is not None and not resultado_df.empty:
+                lista_global_resultados.append(resultado_df)
 
     # --- C. Consolidación Final de Datos ---
     print("\nConsolidando todos los resultados...")
@@ -143,11 +149,7 @@ if __name__ == '__main__':
 
         # --- B. UMAP ---
         print("Ejecutando UMAP...")
-        reducer = umap.UMAP(
-            n_neighbors=UMAP_N_NEIGHBORS,
-            min_dist=UMAP_MIN_DIST,
-            random_state=123
-        )
+        reducer = umap.UMAP(n_neighbors=UMAP_N_NEIGHBORS, min_dist=UMAP_MIN_DIST, random_state=123)
         embedding = reducer.fit_transform(datos_escalados)
 
         # --- C. HDBSCAN ---
@@ -156,7 +158,7 @@ if __name__ == '__main__':
         clusterer.fit(embedding)
         datos_completos['cluster'] = clusterer.labels_
 
-        # --- D. Visualización (CORREGIDO) ---
+        # --- D. Visualización ---
         print("Generando gráfico de visualización...")
         plot_data = pd.DataFrame(embedding, columns=['UMAP1', 'UMAP2'])
         plot_data['cluster_label'] = [f"Cluster {l}" if l != -1 else "Ruido" for l in clusterer.labels_]
@@ -166,7 +168,7 @@ if __name__ == '__main__':
             x='UMAP1', y='UMAP2', 
             hue='cluster_label', 
             data=plot_data,
-            palette="viridis",  # <--- ¡CAMBIO CLAVE AQUÍ!
+            palette="viridis",
             alpha=0.6, s=10
         )
         
@@ -178,6 +180,7 @@ if __name__ == '__main__':
         plt.legend(title="Grupo")
         
         plt.savefig(ruta_carpeta_salida / "visualizacion_clusters.png")
+        # En un notebook de Kaggle, plt.show() puede ser redundante, pero no hace daño
         plt.show()
 
         # ===================================================================
