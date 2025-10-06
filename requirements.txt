@@ -1,0 +1,19 @@
+# --- Librerías principales y de manipulación de datos ---
+numpy
+pandas
+scipy
+
+# --- Librerías de Machine Learning y Clustering ---
+scikit-learn
+umap-learn
+hdbscan
+
+# --- Librerías de análisis de audio ---
+librosa
+noisereduce
+soundfile
+
+# --- Librerías de visualización y utilidades ---
+matplotlib
+seaborn
+tqdm

@@ -1,0 +1,8 @@
+# Ignorar carpetas de datos y salidas
+Datos/
+Salida/
+
+# Ignorar otros archivos generados (opcional pero recomendado)
+audio_clusters/
+__pycache__/
+*.pyc
