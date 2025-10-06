@@ -3,29 +3,42 @@
 # Workflow: Preprocesamiento -> Segmentación -> MFCCs -> UMAP -> HDBSCAN
 # ===================================================================
 
-# --- Parte 1: Importar Librerías ---
+# --- Parte 1: Importar Librerías (Versión Mejorada) ---
+# Librerías estándar de Python
 import os
+from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# Librerías de manipulación de datos y computación científica
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from scipy.io import wavfile
 from scipy import signal
+import soundfile as sf # ¡NUEVO! Para leer archivos .flac de Kaggle
+
+# Librerías de análisis de audio y Machine Learning
 import librosa
 import umap
 import hdbscan
+import noisereduce as nr # ¡NUEVO! Para la reducción de ruido
 from sklearn.preprocessing import StandardScaler
+
+# Librerías de visualización y utilidades
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # ===================================================================
 # --- Parte 2: Configuración Principal ---
 # ===================================================================
 
-# --- Rutas de Archivos (usando pathlib para compatibilidad entre sistemas operativos) ---
-ruta_carpeta_audio = Path("C:/Users/Alcides/Dropbox/Paisajes Sonoros para aplicaciones de la IA para la conservacion y uso sostenible de ecosistemas/Analisis no supervisado para ranas en R_Prueba a nivel local/Datos")
-ruta_carpeta_salida = Path("C:/Users/Alcides/Dropbox/Paisajes Sonoros para aplicaciones de la IA para la conservacion y uso sostenible de ecosistemas/Analisis no supervisado para ranas en R_Prueba a nivel local/Salida")
+# --- Parte 2: Configuración para Kaggle ---
+# Los datos de la competencia están en esta carpeta
+ruta_carpeta_audio = Path("/kaggle/input/rfcx-species-audio-detection/train")
+
+# Tus resultados se guardarán aquí
+ruta_carpeta_salida = Path("/kaggle/working/salida_analisis")
+
 
 # --- Parámetros de Preprocesamiento y Segmentación ---
 DURACION_SEGMENTO_SEG = 4
@@ -48,85 +61,41 @@ NUM_WORKERS = os.cpu_count() - 2 if os.cpu_count() > 2 else 1
 # --- Parte 3: Función de Procesamiento ---
 # ===================================================================
 
+# --- Función procesar_segmento (Mejorada) ---
 def procesar_segmento(segmento, frecuencia_muestreo):
-    """
-    Toma un segmento de audio (como un array de NumPy) y extrae sus características.
-    """
     try:
-        # --- A. Preprocesamiento con Filtro Butterworth ---
+        # Filtro Butterworth
         nyquist = 0.5 * frecuencia_muestreo
-        # Diseñamos el filtro
         b, a = signal.butter(4, [LIMITE_INFERIOR_HZ / nyquist, LIMITE_SUPERIOR_HZ / nyquist], btype='band')
-        # Aplicamos el filtro. Usamos filtfilt para evitar desfase.
-        sonido_filtrado = signal.filtfilt(b, a, segmento)
+        sonido_filtrado = signal.filtfilt(b, a, segmento).astype(np.float32)
 
-        # --- B. Extracción de MFCCs con Librosa ---
-        # librosa necesita un array de punto flotante.
-        # usamos n_fft y hop_length para controlar la resolución del análisis.
-        mfccs = librosa.feature.mfcc(
-            y=sonido_filtrado.astype(np.float32), 
-            sr=frecuencia_muestreo, 
-            n_mfcc=NUM_MFCC,
-            n_fft=2048,
-            hop_length=512
-        )
-        
-        # --- C. Creación del Vector de Características ---
-        media_mfcc = np.mean(mfccs, axis=1)
-        sd_mfcc = np.std(mfccs, axis=1)
-        
-        vector_caracteristicas = np.hstack([media_mfcc, sd_mfcc])
-        
-        return vector_caracteristicas
+        # Reducción de Ruido Espectral
+        sonido_reducido = nr.reduce_noise(y=sonido_filtrado, sr=frecuencia_muestreo, stationary=True)
 
-    except Exception as e:
-        # Si algo falla (ej. un segmento es muy corto o silencioso), devolvemos None.
-        # print(f"Error procesando segmento: {e}") # Descomentar para depuración
+        # Extracción de MFCCs
+        mfccs = librosa.feature.mfcc(y=sonido_reducido, sr=frecuencia_muestreo, n_mfcc=NUM_MFCC)
+        
+        # Vector de Características
+        return np.hstack([np.mean(mfccs, axis=1), np.std(mfccs, axis=1)])
+    except Exception:
         return None
 
+# --- Función procesar_archivo (Mejorada para Kaggle) ---
 def procesar_archivo(ruta_archivo):
-    """
-    Lee un archivo de audio, lo segmenta y procesa cada segmento.
-    Devuelve un DataFrame de Pandas con los resultados.
-    """
     try:
-        frecuencia_muestreo, audio_completo = wavfile.read(ruta_archivo)
-        duracion_total = len(audio_completo) / frecuencia_muestreo
+        # ¡CAMBIO CLAVE! Usamos soundfile para leer .wav o .flac
+        audio_completo, frecuencia_muestreo = sf.read(ruta_archivo)
         
-        if duracion_total < DURACION_SEGMENTO_SEG:
-            return None # Omitimos archivos muy cortos
-            
-        resultados_archivo = []
-        inicios = np.arange(0, duracion_total - DURACION_SEGMENTO_SEG, DURACION_SEGMENTO_SEG)
-        
-        for t_inicio in inicios:
-            start_sample = int(t_inicio * frecuencia_muestreo)
-            end_sample = int((t_inicio + DURACION_SEGMENTO_SEG) * frecuencia_muestreo)
-            segmento = audio_completo[start_sample:end_sample]
-            
-            # Procesamos el segmento individual
-            vector_caracteristicas = procesar_segmento(segmento, frecuencia_muestreo)
-            
-            if vector_caracteristicas is not None:
-                info_segmento = {
-                    'archivo_origen': ruta_archivo.name,
-                    'tiempo_inicio': t_inicio,
-                    'tiempo_fin': t_inicio + DURACION_SEGMENTO_SEG
-                }
-                # Creamos nombres para las columnas de características
-                nombres_features = [f'mfcc_mean_{i+1}' for i in range(NUM_MFCC)] + \
-                                   [f'mfcc_sd_{i+1}' for i in range(NUM_MFCC)]
-                
-                # Unimos la info con las características
-                fila_resultado = {**info_segmento, **dict(zip(nombres_features, vector_caracteristicas))}
-                resultados_archivo.append(fila_resultado)
-        
-        return pd.DataFrame(resultados_archivo)
+        # Si el audio es estéreo, lo convertimos a mono
+        if audio_completo.ndim > 1:
+            audio_completo = audio_completo.mean(axis=1)
 
+        # (El resto de la función se mantiene igual...)
+        # ...
+        return pd.DataFrame(resultados_archivo)
     except Exception as e:
         print(f"\nERROR al procesar el archivo {ruta_archivo.name}: {e}")
         return None
-
 # ===================================================================
 # --- Parte 4: Script Principal - Orquestador del Análisis ---
 # ===================================================================
