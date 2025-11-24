@@ -2,7 +2,6 @@
 
 Este repositorio contiene un pipeline completo para el análisis no supervisado de grabaciones pasivas de ranas en la Reserva Natural Tapytá (Caazapá, Paraguay). Incluye preprocesamiento, extracción de características (MFCCs), reducción de dimensionalidad (UMAP), clustering (HDBSCAN) y exportación en formato Raven para validación humana.
 
-Consultas y recomendaciones: alcidesrojasg@gmail.com
 
 ## Estructura del repositorio (A priori)
 
@@ -39,4 +38,5 @@ Las anotaciones se exportan en formato compatible con Raven para inspección vis
 ## Créditos
 
 Desarrollado por **Alcides Rojas** con asistencia de Microsoft Copilot.
+Consultas y recomendaciones son bienvenidas: alcidesrojasg@gmail.com
 
