@@ -16,12 +16,15 @@ Consultas y recomendaciones: alcidesrojasg@gmail.com
 
 ### Ejemplo de salida
 
-```markdown
-## Ejemplo de anotación Raven
+## Ejemplo de anotación Raven exportada
 
 | Selection | Begin Time (s) | End Time (s) | Cluster_ID | Cluster_Prob | Species_Label |
 |-----------|----------------|--------------|------------|---------------|----------------|
 | 1         | 0.0            | 4.0          | Cluster 2  | 0.87          | Scinax sp.     |
+| 2         | 4.0            | 8.0          | Cluster 2  | 0.91          | Scinax sp.     |
+| 3         | 8.0            | 12.0         | Ruido      | 0.00          |                |
+
+> Estas anotaciones pueden abrirse en Raven para inspección visual y auditiva. La columna `Cluster_Prob` indica la confianza del clustering, y `Species_Label` puede completarse manualmente durante la validación humana.
 
 ## Validación humana
 
