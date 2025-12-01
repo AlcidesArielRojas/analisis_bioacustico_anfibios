@@ -161,7 +161,7 @@ if __name__ == '__main__':
         # --- D. Visualización ---
         print("Generando gráfico de visualización...")
         plot_data = pd.DataFrame(embedding, columns=['UMAP1', 'UMAP2'])
-        plot_data['cluster_label'] = [f"Cluster {l}" if l != -1 else "Ruido" for l in clusterer.labels_]
+        plot_data['cluster_label'] = [f"Cluster {label}" if label != -1 else "Ruido" for label in clusterer.labels_]
         
         plt.figure(figsize=(12, 9))
         sns.scatterplot(

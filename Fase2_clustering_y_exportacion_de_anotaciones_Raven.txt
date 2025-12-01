@@ -1,17 +1,22 @@
 # ================================================================
-# Fase 2: Clustering y exportación de anotaciones Raven (mejorado)
+# Fase 2: Clustering y exportación de anotaciones Raven
 # Autor: Alcides Rojas
 # Correo: alcidesrojasg@gmail.com
-# Fecha de creación: 2025-11-24
+# Fecha de creación: 2025-11-10
 # Descripción: Carga características extraídas en Fase 1 (.parquet),
 #              aplica estandarización, reduce dimensionalidad con UMAP,
 #              agrupa segmentos con HDBSCAN,
-#              exporta tablas Raven enriquecidas con probabilidad,
-#              ID global, campo para validación humana y embeddings UMAP.
+#              genera visualización de clusters y exporta tablas
+#              en formato Raven (.Table.1.selections.txt).
+# Dependencias: pandas, numpy, scikit-learn, umap-learn, hdbscan,
+#               matplotlib, seaborn
+# Asistencia: Microsoft Copilot (IA)
 # ================================================================
 
+
+# fase2_clustering.py
 import pandas as pd
-import hashlib
+# import numpy as np
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 import umap
@@ -31,12 +36,6 @@ HDBSCAN_MIN_PTS = 100
 LIMITE_INFERIOR_HZ = 700
 LIMITE_SUPERIOR_HZ = 2500
 
-# --- Funciones auxiliares ---
-def generar_id_global(row):
-    """Genera un hash único por selección usando archivo, tiempos y canal."""
-    clave = f"{row['archivo_origen']}|{row['tiempo_inicio']}|{row['tiempo_fin']}|{row.get('channel',1)}"
-    return hashlib.md5(clave.encode()).hexdigest()
-
 # --- Orquestador ---
 if __name__ == "__main__":
     datos = pd.read_parquet(ruta_features)
@@ -46,27 +45,20 @@ if __name__ == "__main__":
     print("Ejecutando UMAP...")
     reducer = umap.UMAP(n_neighbors=UMAP_N_NEIGHBORS, min_dist=UMAP_MIN_DIST, random_state=123)
     embedding = reducer.fit_transform(escalados)
-    datos["UMAP1"], datos["UMAP2"] = embedding[:,0], embedding[:,1]
 
     print("Ejecutando HDBSCAN...")
     clusterer = hdbscan.HDBSCAN(min_cluster_size=HDBSCAN_MIN_PTS)
     clusterer.fit(embedding)
     datos["cluster"] = clusterer.labels_
-    datos["cluster_prob"] = clusterer.probabilities_
-
-    # Añadir ID global y campo para validación humana
-    datos["id_global"] = datos.apply(generar_id_global, axis=1)
-    datos["species_label"] = ""  # vacío, para completar en validación humana
-
-    # Guardar embeddings y clustering en parquet
-    datos.to_parquet(ruta_salida / "embeddings_clusters.parquet", index=False)
 
     # Visualización
+    plot_data = pd.DataFrame(embedding, columns=["UMAP1","UMAP2"])
+    plot_data["cluster"] = datos["cluster"]
     plt.figure(figsize=(12,9))
-    sns.scatterplot(x="UMAP1", y="UMAP2", hue="cluster", data=datos, palette="tab20", s=10)
+    sns.scatterplot(x="UMAP1", y="UMAP2", hue="cluster", data=plot_data, palette="tab20", s=10)
     plt.savefig(ruta_salida/"clusters.png")
 
-    # Exportación Raven enriquecida
+    # Exportación Raven
     def exportar_raven(grupo):
         nombre = grupo["archivo_origen"].iloc[0]
         tabla = pd.DataFrame({
@@ -77,15 +69,10 @@ if __name__ == "__main__":
             "End Time (s)": grupo["tiempo_fin"],
             "Low Freq (Hz)": LIMITE_INFERIOR_HZ,
             "High Freq (Hz)": LIMITE_SUPERIOR_HZ,
-            "Cluster_ID": [f"Cluster {c}" if c!=-1 else "Ruido" for c in grupo["cluster"]],
-            "Cluster_Prob": grupo["cluster_prob"],
-            "Global_ID": grupo["id_global"],
-            "Species_Label": grupo["species_label"],
-            "UMAP1": grupo["UMAP1"],
-            "UMAP2": grupo["UMAP2"]
+            "Cluster_ID": [f"Cluster {c}" if c!=-1 else "Ruido" for c in grupo["cluster"]]
         })
         salida = ruta_raven / f"{Path(nombre).stem}.Table.1.selections.txt"
         tabla.to_csv(salida, sep="\t", index=False)
 
     datos.groupby("archivo_origen").apply(exportar_raven)
-    print("Exportación Raven enriquecida completa.")
+    print("Exportación Raven completa.")
