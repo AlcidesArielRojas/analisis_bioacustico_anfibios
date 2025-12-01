@@ -3,15 +3,13 @@
 # Autor: Alcides Rojas
 # Correo: alcidesrojasg@gmail.com
 # Fecha de creación: 2025-11-10
-# Descripción: Procesa audios .wav/.flac, segmenta en ventanas de 4s,
-#              aplica filtro pasa banda y reducción de ruido,
+# Descripción: Procesa audios .wav/.flac en subcarpetas 'Data' del disco externo,
+#              segmenta en ventanas de 4s, aplica filtro pasa banda y reducción de ruido,
 #              calcula MFCCs y guarda resultados en formato .parquet.
-# Dependencias: numpy, pandas, librosa, soundfile, umap-learn, hdbscan, noisereduce
+# Dependencias: numpy, pandas, librosa, soundfile, scipy, noisereduce, tqdm
 # Asistencia: Microsoft Copilot (IA)
 # ================================================================
 
-
-# fase1_features.py
 import os
 import numpy as np
 import pandas as pd
@@ -28,11 +26,14 @@ DURACION_SEGMENTO_SEG = 4
 LIMITE_INFERIOR_HZ = 700
 LIMITE_SUPERIOR_HZ = 2500
 NUM_MFCC = 20
-NUM_WORKERS = os.cpu_count() - 2 if os.cpu_count() > 2 else 1
+NUM_WORKERS = os.cpu_count() - 2 if os.cpu_count() and os.cpu_count() > 2 else 1
 
-ruta_carpeta_audio = Path("input_wav")
-ruta_salida = Path("resultados")
+# Disco externo (ajusta la letra si no es D:)
+ruta_base_externa = Path(r"D:\")  # SAMSUNG (D:)
+# Carpeta local del repo, donde guardarás resultados
+ruta_salida = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados")
 ruta_salida.mkdir(exist_ok=True)
+
 ruta_features = ruta_salida / "features.parquet"
 
 # --- Funciones ---
@@ -47,44 +48,69 @@ def procesar_segmento(segmento, sr):
     except Exception:
         return None
 
-def procesar_archivo(ruta):
+def procesar_archivo(ruta: Path):
     try:
         audio, sr = sf.read(ruta)
         if audio.ndim > 1:
             audio = audio.mean(axis=1)
-        duracion = len(audio)/sr
+        duracion = len(audio) / sr
         if duracion < DURACION_SEGMENTO_SEG:
             return None
+
         resultados = []
-        inicios = np.arange(0, duracion-DURACION_SEGMENTO_SEG, DURACION_SEGMENTO_SEG)
+        inicios = np.arange(0, duracion - DURACION_SEGMENTO_SEG, DURACION_SEGMENTO_SEG)
         for t in inicios:
-            seg = audio[int(t*sr):int((t+DURACION_SEGMENTO_SEG)*sr)]
+            seg = audio[int(t*sr):int((t + DURACION_SEGMENTO_SEG)*sr)]
             vec = procesar_segmento(seg, sr)
             if vec is not None:
+                # sitio y archivo relativo (evita colisiones entre sitios)
+                sitio = ruta.parent.parent.name if ruta.parent.name == "Data" else ruta.parent.name
+                archivo_rel = f"{sitio}/{ruta.name}"
+
                 info = {
-                    "archivo_origen": ruta.name,
+                    "archivo_origen": archivo_rel,
+                    "sitio": sitio,
                     "tiempo_inicio": t,
-                    "tiempo_fin": t+DURACION_SEGMENTO_SEG
+                    "tiempo_fin": t + DURACION_SEGMENTO_SEG
                 }
                 nombres = [f"mfcc_mean_{i+1}" for i in range(NUM_MFCC)] + \
                           [f"mfcc_sd_{i+1}" for i in range(NUM_MFCC)]
                 resultados.append({**info, **dict(zip(nombres, vec))})
-        return pd.DataFrame(resultados)
+
+        return pd.DataFrame(resultados) if resultados else None
     except Exception as e:
         print(f"Error en {ruta.name}: {e}")
         return None
 
 # --- Orquestador ---
 if __name__ == "__main__":
-    archivos = list(ruta_carpeta_audio.rglob("*.wav")) + list(ruta_carpeta_audio.rglob("*.flac"))
+    carpetas_site = [p for p in ruta_base_externa.iterdir() if p.is_dir()]
     resultados = []
-    with ProcessPoolExecutor(max_workers=NUM_WORKERS) as ex:
-        futuros = {ex.submit(procesar_archivo, r): r for r in archivos}
-        for f in tqdm(as_completed(futuros), total=len(archivos)):
-            df = f.result()
-            if df is not None and not df.empty:
-                resultados.append(df)
+
+    for carpeta in carpetas_site:
+        data_dir = carpeta / 'Data'
+        if data_dir.exists():
+            archivos = list(data_dir.rglob('*.wav'))
+            # También hay .flac en Data, podés incluir:
+            # archivos += list(data_dir.rglob('*.flac'))
+
+            print(f"Procesando sitio: {carpeta.name} ({len(archivos)} archivos)")
+            with ProcessPoolExecutor(max_workers=NUM_WORKERS) as ex:
+                futuros = {ex.submit(procesar_archivo, r): r for r in archivos}
+                for f in tqdm(as_completed(futuros), total=len(archivos), desc=carpeta.name):
+                    df = f.result()
+                    if df is not None and not df.empty:
+                        resultados.append(df)
+
     if resultados:
         datos = pd.concat(resultados, ignore_index=True)
-        datos.to_parquet(ruta_features)
-        print(f"Guardado en {ruta_features}, {len(datos)} segmentos procesados.")
+        datos.to_parquet(ruta_features, index=False)
+        print(f"Guardado en {ruta_features}, tiene {len(datos)} segmentos procesados.")
+
+        # Resumen por sitio
+        resumen = datos.groupby("sitio").size().reset_index(name="segmentos")
+        resumen.to_csv(ruta_salida / "resumen_segmentos_por_sitio.csv", index=False)
+        print("Resumen por sitio:")
+        print(resumen)
+    else:
+        print("No se generaron resultados. Verifica que existan .wav en las carpetas Data del disco externo.")
