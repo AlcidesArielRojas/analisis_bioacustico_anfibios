@@ -1,33 +1,30 @@
 # ================================================================
-# Fase 1: Extracción de características de audio (MFCCs)
+# Fase 1: Extracción de características de audio (MFCCs) optimizada
 # Autor: Alcides Rojas
-# Correo: alcidesrojasg@gmail.com
-# Fecha de creación: 2025-11-10
-# Descripción: Procesa audios .wav/.flac en subcarpetas 'Data' del disco externo,
-#              segmenta en ventanas de 4s, aplica filtro pasa banda y reducción de ruido,
-#              calcula MFCCs y guarda resultados en formato .parquet.
-# Dependencias: numpy, pandas, librosa, soundfile, scipy, noisereduce, tqdm
-# Asistencia: Microsoft Copilot (IA)
+# Fecha: 2025-12-08
+# Modificaciones: joblib.Parallel, vectorización con NumPy,
+#                 lotes, ventanas de 4s con 50% solapamiento
 # ================================================================
 
 import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import soundfile as sf
 from scipy import signal
 import librosa
 import noisereduce as nr
 from tqdm import tqdm
+from joblib import Parallel, delayed
 
 # --- Configuración ---
 DURACION_SEGMENTO_SEG = 4
+SOLAPAMIENTO_SEG = 2   # 50% de solapamiento → hop = 2s
 LIMITE_INFERIOR_HZ = 700
 LIMITE_SUPERIOR_HZ = 2500
 NUM_MFCC = 20
-NUM_WORKERS = 4
-TAMANO_BLOQUE = 1000  # cantidad de archivos por lote
+NUM_WORKERS = 2
+TAMANO_BLOQUE = 200  # cantidad de archivos por lote
 
 # Disco externo (ajusta la letra si no es D:)
 ruta_base_externa = Path(r"D:\\")  # SAMSUNG (D:)
@@ -39,6 +36,7 @@ ruta_features = ruta_salida / "features.parquet"
 
 # --- Funciones ---
 def procesar_segmento(segmento, sr):
+    """Aplica filtrado, reducción de ruido y calcula MFCCs de un segmento."""
     try:
         nyquist = 0.5 * sr
         b, a = signal.butter(4, [LIMITE_INFERIOR_HZ/nyquist, LIMITE_SUPERIOR_HZ/nyquist], btype='band')
@@ -51,6 +49,7 @@ def procesar_segmento(segmento, sr):
         return None
 
 def procesar_archivo(ruta: Path):
+    """Procesa un archivo de audio en segmentos solapados de 4s."""
     try:
         audio, sr = sf.read(ruta)
         if audio.ndim > 1:
@@ -59,10 +58,13 @@ def procesar_archivo(ruta: Path):
         if duracion < DURACION_SEGMENTO_SEG:
             return None
 
+        # Vectorización: dividir en ventanas de 4s con hop de 2s
+        frame_length = int(DURACION_SEGMENTO_SEG * sr)
+        hop_length = int(SOLAPAMIENTO_SEG * sr)
+        frames = librosa.util.frame(audio, frame_length=frame_length, hop_length=hop_length).T
+
         resultados = []
-        inicios = np.arange(0, duracion - DURACION_SEGMENTO_SEG, DURACION_SEGMENTO_SEG)
-        for t in inicios:
-            seg = audio[int(t*sr):int((t + DURACION_SEGMENTO_SEG)*sr)]
+        for i, seg in enumerate(frames):
             vec = procesar_segmento(seg, sr)
             if vec is not None:
                 sitio = ruta.parent.parent.name if ruta.parent.name == "Data" else ruta.parent.name
@@ -71,11 +73,11 @@ def procesar_archivo(ruta: Path):
                 info = {
                     "archivo_origen": archivo_rel,
                     "sitio": sitio,
-                    "tiempo_inicio": t,
-                    "tiempo_fin": t + DURACION_SEGMENTO_SEG
+                    "tiempo_inicio": i * SOLAPAMIENTO_SEG,
+                    "tiempo_fin": i * SOLAPAMIENTO_SEG + DURACION_SEGMENTO_SEG
                 }
-                nombres = [f"mfcc_mean_{i+1}" for i in range(NUM_MFCC)] + \
-                          [f"mfcc_sd_{i+1}" for i in range(NUM_MFCC)]
+                nombres = [f"mfcc_mean_{j+1}" for j in range(NUM_MFCC)] + \
+                          [f"mfcc_sd_{j+1}" for j in range(NUM_MFCC)]
                 resultados.append({**info, **dict(zip(nombres, vec))})
 
         return pd.DataFrame(resultados) if resultados else None
@@ -92,7 +94,7 @@ if __name__ == "__main__":
         data_dir = carpeta / 'Data'
         if data_dir.exists():
             archivos = list(data_dir.rglob('*.wav'))
-            # También hay .flac en Data, podés incluir:
+            # También incluir .flac si querés:
             # archivos += list(data_dir.rglob('*.flac'))
 
             print(f"Procesando sitio: {carpeta.name} ({len(archivos)} archivos)")
@@ -100,15 +102,10 @@ if __name__ == "__main__":
 
             for i, bloque in enumerate(bloques):
                 print(f"  → Lote {i+1}/{len(bloques)} con {len(bloque)} archivos")
-                with ThreadPoolExecutor(max_workers=NUM_WORKERS) as ex:
-                    futuros = {ex.submit(procesar_archivo, r): r for r in bloque}
-                    for f in tqdm(as_completed(futuros), total=len(bloque), desc=f"{carpeta.name} - Lote {i+1}"):
-                        try:
-                            df = f.result()
-                            if df is not None and not df.empty:
-                                resultados.append(df)
-                        except Exception as e:
-                            print(f"⚠️ Error en procesamiento paralelo: {e}")
+                resultados_bloque = Parallel(n_jobs=NUM_WORKERS)(
+                    delayed(procesar_archivo)(r) for r in bloque
+                )
+                resultados.extend([df for df in resultados_bloque if df is not None])
 
     if resultados:
         datos = pd.concat(resultados, ignore_index=True)
