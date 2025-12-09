@@ -1,0 +1,11 @@
+numpy
+pandas
+librosa
+soundfile
+scipy
+noisereduce
+tqdm
+umap-learn
+hdbscan
+seaborn
+matplotlib

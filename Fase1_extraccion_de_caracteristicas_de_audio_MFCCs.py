@@ -14,7 +14,7 @@ import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import soundfile as sf
 from scipy import signal
 import librosa
@@ -26,10 +26,11 @@ DURACION_SEGMENTO_SEG = 4
 LIMITE_INFERIOR_HZ = 700
 LIMITE_SUPERIOR_HZ = 2500
 NUM_MFCC = 20
-NUM_WORKERS = os.cpu_count() - 2 if os.cpu_count() and os.cpu_count() > 2 else 1
+NUM_WORKERS = 4
+TAMANO_BLOQUE = 1000  # cantidad de archivos por lote
 
 # Disco externo (ajusta la letra si no es D:)
-ruta_base_externa = Path(r"D:\")  # SAMSUNG (D:)
+ruta_base_externa = Path(r"D:\\")  # SAMSUNG (D:)
 # Carpeta local del repo, donde guardarás resultados
 ruta_salida = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados")
 ruta_salida.mkdir(exist_ok=True)
@@ -45,7 +46,8 @@ def procesar_segmento(segmento, sr):
         reducido = nr.reduce_noise(y=filtrado, sr=sr, stationary=False)
         mfccs = librosa.feature.mfcc(y=reducido, sr=sr, n_mfcc=NUM_MFCC)
         return np.hstack([np.mean(mfccs, axis=1), np.std(mfccs, axis=1)])
-    except Exception:
+    except Exception as e:
+        print(f"Error en procesar_segmento: {e}")
         return None
 
 def procesar_archivo(ruta: Path):
@@ -63,7 +65,6 @@ def procesar_archivo(ruta: Path):
             seg = audio[int(t*sr):int((t + DURACION_SEGMENTO_SEG)*sr)]
             vec = procesar_segmento(seg, sr)
             if vec is not None:
-                # sitio y archivo relativo (evita colisiones entre sitios)
                 sitio = ruta.parent.parent.name if ruta.parent.name == "Data" else ruta.parent.name
                 archivo_rel = f"{sitio}/{ruta.name}"
 
@@ -95,19 +96,25 @@ if __name__ == "__main__":
             # archivos += list(data_dir.rglob('*.flac'))
 
             print(f"Procesando sitio: {carpeta.name} ({len(archivos)} archivos)")
-            with ProcessPoolExecutor(max_workers=NUM_WORKERS) as ex:
-                futuros = {ex.submit(procesar_archivo, r): r for r in archivos}
-                for f in tqdm(as_completed(futuros), total=len(archivos), desc=carpeta.name):
-                    df = f.result()
-                    if df is not None and not df.empty:
-                        resultados.append(df)
+            bloques = np.array_split(archivos, max(1, len(archivos) // TAMANO_BLOQUE))
+
+            for i, bloque in enumerate(bloques):
+                print(f"  → Lote {i+1}/{len(bloques)} con {len(bloque)} archivos")
+                with ThreadPoolExecutor(max_workers=NUM_WORKERS) as ex:
+                    futuros = {ex.submit(procesar_archivo, r): r for r in bloque}
+                    for f in tqdm(as_completed(futuros), total=len(bloque), desc=f"{carpeta.name} - Lote {i+1}"):
+                        try:
+                            df = f.result()
+                            if df is not None and not df.empty:
+                                resultados.append(df)
+                        except Exception as e:
+                            print(f"⚠️ Error en procesamiento paralelo: {e}")
 
     if resultados:
         datos = pd.concat(resultados, ignore_index=True)
         datos.to_parquet(ruta_features, index=False)
         print(f"Guardado en {ruta_features}, tiene {len(datos)} segmentos procesados.")
 
-        # Resumen por sitio
         resumen = datos.groupby("sitio").size().reset_index(name="segmentos")
         resumen.to_csv(ruta_salida / "resumen_segmentos_por_sitio.csv", index=False)
         print("Resumen por sitio:")
