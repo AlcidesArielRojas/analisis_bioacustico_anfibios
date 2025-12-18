@@ -1,12 +1,15 @@
 # ================================================================
 # Fase 1: Extracción de características de audio (MFCCs) optimizada
 # Autor: Alcides Rojas
-# Fecha: 2025-12-12
-# Modificaciones:
-#  - Unificación de sitios BO-81Tapyta y BO-82Tapyta → "BO"
-#  - Procesamiento secuencial (sin joblib/Parallel)
-#  - Guardado por lote en .parquet y detección de lotes ya procesados
-#  - Concatenación final desde temporales
+# Fecha: 2025-12-18
+# Versión PC de escritorio (más potencia)
+# Correcciones:
+# - Validación de entorno (disco externo y pyarrow)
+# - Procesamiento secuencial (sin joblib/Parallel)
+# - Guardado por lote en .parquet y detección de lotes ya procesados
+# - Concatenación final desde temporales
+# - tqdm para progreso por archivo
+# - Unificación de sitios BO-81Tapyta y BO-82Tapyta → "BO"
 # ================================================================
 
 import os
@@ -30,13 +33,23 @@ TAMANO_BLOQUE = 100  # cantidad de archivos por lote
 # Disco externo (ajusta la letra si no es D:)
 ruta_base_externa = Path(r"D:\\")  # SAMSUNG (D:)
 # Carpeta local del repo, donde guardarás resultados
-ruta_salida = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados")
+ruta_salida = Path(r"C:\Users\Alcides\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados")
 ruta_salida.mkdir(exist_ok=True)
 
 ruta_temporales = ruta_salida / "temporales_fase1"
 ruta_temporales.mkdir(exist_ok=True)
 ruta_features_final = ruta_salida / "features.parquet"
 ruta_resumen = ruta_salida / "resumen_segmentos_por_sitio.csv"
+
+# --- Validación de entorno ---
+def validar_entorno():
+    if not ruta_base_externa.exists():
+        raise RuntimeError(f"⚠️ Disco externo no encontrado: {ruta_base_externa}")
+    try:
+        import pyarrow  # noqa: F401
+    except Exception:
+        print("⚠️ pyarrow no está disponible. Instalá: pip install pyarrow==15.0.2")
+        print("   Alternativamente, cambia a CSV con to_csv (menos eficiente).")
 
 # --- Funciones ---
 def procesar_segmento(segmento, sr):
@@ -101,6 +114,7 @@ def procesar_archivo(ruta: Path):
 
 # --- Orquestador ---
 if __name__ == "__main__":
+    validar_entorno()
     carpetas_site = [p for p in ruta_base_externa.iterdir() if p.is_dir()]
 
     for carpeta in carpetas_site:
@@ -109,9 +123,6 @@ if __name__ == "__main__":
             continue
 
         archivos = list(data_dir.rglob('*.wav'))
-        # Si querés incluir .flac, descomentá:
-        # archivos += list(data_dir.rglob('*.flac'))
-
         print(f"Procesando sitio: {carpeta.name} ({len(archivos)} archivos)")
         if len(archivos) == 0:
             continue
@@ -131,7 +142,7 @@ if __name__ == "__main__":
 
             print(f"📦 Lote {i+1}/{len(bloques)} con {len(bloque)} archivos")
             resultados_bloque = []
-            for r in bloque:
+            for r in tqdm(bloque, desc=f"{carpeta.name} Lote {i+1}", unit="arch"):
                 df = procesar_archivo(r)
                 if df is not None:
                     resultados_bloque.append(df)
