@@ -33,7 +33,7 @@ TAMANO_BLOQUE = 100  # cantidad de archivos por lote
 # Disco externo (ajusta la letra si no es D:)
 ruta_base_externa = Path(r"D:\\")  # SAMSUNG (D:)
 # Carpeta local del repo, donde guardarás resultados
-ruta_salida = Path(r"C:\Users\Alcides\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados")
+ruta_salida = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados")
 ruta_salida.mkdir(exist_ok=True)
 
 ruta_temporales = ruta_salida / "temporales_fase1"

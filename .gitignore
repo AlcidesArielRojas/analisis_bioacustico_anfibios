@@ -1,1 +1,23 @@
+# Ignorar todo por defecto
+*
+
+# Pero no ignorar estos tipos de archivo
+!*.py
+!*.png
+!*.txt
+
+# No ignorar el archivo .gitignore en sí
+!.gitignore
+
+# No ignorar carpetas (para que Git pueda rastrear archivos permitidos dentro de ellas)
+!*/
+
+# Opcional: ignorar carpetas específicas como entornos virtuales o temporales
 venv/
+__pycache__/
+*.parquet
+*.csv
+*.log
+*.ipynb
+
+resultados/Salida de Consola_Fase_1_Extraccion de Caracteristicas_Mel.txt
