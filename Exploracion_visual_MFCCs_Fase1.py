@@ -8,6 +8,7 @@
 import os
 import pandas as pd
 import numpy as np
+from datetime import datetime
 
 # Librerías de visualización
 import matplotlib.pyplot as plt
@@ -23,7 +24,7 @@ plt.rcParams["axes.labelsize"] = 11        # tamaño de etiquetas
 
 # --- Parámetros del usuario ---
 # Ruta al archivo features.parquet (ajustá si es necesario)
-RUTA_PARQUET = r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados\features.parquet"
+RUTA_PARQUET = r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados\features_CANTERA1Tapy.parquet"
 
 # Cantidad máxima de filas para muestrear en gráficos (evitar saturación)
 # Si tenés millones de filas, graficar todas puede ser lento; usamos una muestra aleatoria.
@@ -52,13 +53,18 @@ def muestrear_df(df: pd.DataFrame, n_max: int, sitios: list[str] | None = None) 
         return df.sample(n_max, random_state=42)
     return df
 
-def guardar_fig(nombre: str):
+def guardar_fig(nombre: str, carpeta: str = "figuras_sin_filtro"):
     """
-    Guarda la figura actual en PNG con nombre especificado dentro de la carpeta 'figuras'.
-    Útil para documentar resultados visuales.
+    Guarda la figura actual en PNG con nombre especificado dentro de la carpeta elegida.
+    Por defecto, guarda en 'figuras_sin_filtro'.
     """
-    os.makedirs("figuras", exist_ok=True)
-    plt.savefig(os.path.join("figuras", f"{nombre}.png"), bbox_inches="tight")
+    os.makedirs(carpeta, exist_ok=True)
+    # Añadir sufijo timestamp para evitar sobrescribir figuras previas
+    ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+    filename = f"{nombre}_{ts}.png"
+    ruta = os.path.join(carpeta, filename)
+    plt.savefig(ruta, bbox_inches="tight")
+    return ruta
 
 # --- 1) Cargar el archivo 'features.parquet' ---
 # Cargamos el dataset de segmentos con MFCCs. Requiere pyarrow o fastparquet instalado.
@@ -210,7 +216,16 @@ if "mfcc_mean_1" in df.columns and "sitio" in df.columns:
 
     # Visualización: barras ordenadas para lectura clara
     plt.figure(figsize=(12, 6))
-    sns.barplot(data=promedio_por_sitio, x="sitio", y="promedio_mfcc_mean_1", palette="crest")
+    # aplicar paleta por sitio (cada barra tiene su color)
+    sns.barplot(
+        data=promedio_por_sitio,
+        x="sitio",
+        y="promedio_mfcc_mean_1",
+        hue="sitio",        # asigna la variable que recibe la paleta
+        dodge=False,        # no desplaza barras (evita barras dobles)
+        palette="crest",
+        legend=False        # opcional, oculta la leyenda redundante
+    )
     plt.title("Promedio de mfcc_mean_1 por sitio (ordenado)")
     plt.xlabel("Sitio"); plt.ylabel("Promedio de mfcc_mean_1")
     plt.xticks(rotation=45, ha="right")
