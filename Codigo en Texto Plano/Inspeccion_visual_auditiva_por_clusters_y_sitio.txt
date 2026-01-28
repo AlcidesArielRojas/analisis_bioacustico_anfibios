@@ -1,0 +1,553 @@
+# ================================================================
+# Fase 3: Inspección visual y auditiva de clusters por sitio
+#
+# Autor: Alcides Ariel Rojas Geraldo
+# Contacto: alcidesrojasg@gmail.com
+#
+# Descripción:
+# Este script recorre los selection tables por cluster generados en Fase 2
+# (Raven Lite) para cada sitio, carga los segmentos de audio originales
+# desde el disco D: usando la columna "archivo_origen" y, apoyándose en
+# la información de UMAP + HDBSCAN de Fase 2, identifica para cada cluster
+# los segmentos más representativos (cercanos al centroide en el espacio
+# UMAP). Para cada cluster:
+#   - selecciona los 2 segmentos más representativos,
+#   - genera una figura con sus espectrogramas mel,
+#   - guarda las figuras en disco,
+#   - permite escuchar interactivamente esos segmentos.
+#
+# Este flujo está pensado como una herramienta de inspección visual y
+# auditiva para evaluar la coherencia interna de los clusters y decidir,
+# de forma informada, si algunos clusters pueden fusionarse (cuando sus
+# segmentos suenan y se ven muy similares) o si conviene mantenerlos
+# separados (cuando representan patrones acústicos distintos).
+#
+# Notas ecológicas:
+# Los datos fueron recolectados en meses relativamente secos (abril, mayo,
+# junio), por lo que se espera una baja ocurrencia de anfibios y una mayor
+# dominancia de insectos en los paisajes sonoros.
+# ================================================================
+
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import librosa
+import librosa.display
+import soundfile as sf
+from itertools import combinations
+
+
+# Para escucha interactiva (en consola tipo IPython / Positron)
+# from IPython.display import Audio, display
+
+# ------------------------------------------------
+# CONFIGURACIÓN GENERAL (ESTA ES LA PARTE QUE PODÉS CAMBIAR)
+# ------------------------------------------------
+
+# Carpeta base del proyecto
+BASE_DIR = Path(r"C:/Users/User/Proyecto_Paisajes_Sonoros_Repositorio_Local")
+
+# Resultados de Fase 2 (UMAP + HDBSCAN)
+RUTA_FASE2 = BASE_DIR / "resultados"
+SUFIJO_CORRIDA = "v2_horario18a06_insectos6a12"
+
+# Carpeta donde están los selection tables por cluster (salida de tu script previo)
+RUTA_ST_CLUSTER = BASE_DIR / "selection_tables_por_cluster_desde_raven"
+
+# Raíz donde están los audios originales en D:
+# "archivo_origen" trae algo como:
+#   CANTERA1Tapy/CANTERA1TAPY_20250603_180002.wav
+#   BO81-Tapyta/BO81TAPYTA_20250603_180002.wav
+AUDIO_ROOT = Path(r"D:/")
+
+# Sitios lógicos según selection tables por cluster
+SITIOS = [
+    "CANTERA1Tapy",
+    "BO-Tapyta",   # BO81-Tapyta y BO82-Tapyta fusionados en Fase 2
+]
+
+# Número máximo de segmentos a mostrar por cluster (para la grilla clásica, si la usás)
+N_MUESTRAS_POR_CLUSTER = 10
+
+# Frecuencia de muestreo objetivo para cargar audio
+SR_OBJETIVO = 22050
+
+# Carpeta donde se guardarán las figuras de inspección
+RUTA_FIGURAS = BASE_DIR / "figuras_inspeccion_clusters"
+RUTA_FIGURAS.mkdir(parents=True, exist_ok=True)
+
+# Estilo de gráficos
+plt.rcParams["figure.figsize"] = (12, 4)
+plt.rcParams["savefig.dpi"] = 150
+
+
+# ------------------------------------------------
+# FUNCIONES AUXILIARES
+# ------------------------------------------------
+
+def cargar_selection_table_por_cluster(sitio: str, cluster: str) -> pd.DataFrame | None:
+    """
+    Carga el selection table de un sitio y cluster específicos, según la estructura:
+    BASE_DIR/selection_tables_por_cluster_desde_raven/sitio/cluster/sitio_cluster_selection_table.txt
+    """
+    nombre_archivo = f"{sitio}_{cluster}_selection_table.txt"
+    ruta_st = RUTA_ST_CLUSTER / sitio / cluster / nombre_archivo
+
+    if not ruta_st.exists():
+        print(f"⚠️ No se encontró el selection table: {ruta_st}")
+        return None
+
+    df = pd.read_csv(ruta_st, sep="\t")
+    if df.empty:
+        print(f"⚠️ Selection table vacío: {ruta_st}")
+        return None
+
+    return df
+
+
+def cargar_segmento_audio(row: pd.Series, audio_root: Path, sr_objetivo: int = SR_OBJETIVO):
+    """
+    Carga un segmento de audio a partir de una fila del DataFrame con:
+      - 'archivo_origen' (ej: CANTERA1Tapy/CANTERA1TAPY_20250621_053602.wav)
+      - 'Begin Time (s)'
+      - 'End Time (s)'
+    Reconstruye la ruta real como:
+      D:/CANTERA1Tapy/Data/CANTERA1TAPY_20250621_053602.wav
+    """
+    archivo_rel = row["archivo_origen"]              # p.ej. CANTERA1Tapy/CANTERA1TAPY_2025....
+    sitio = archivo_rel.split("/")[0]                # CANTERA1Tapy o BO-82Tapyta
+    nombre_audio = Path(archivo_rel).name            # CANTERA1TAPY_2025....wav
+
+    ruta_audio = audio_root / sitio / "Data" / nombre_audio
+
+    t_ini = float(row["Begin Time (s)"])
+    t_fin = float(row["End Time (s)"])
+
+    if not ruta_audio.exists():
+        raise FileNotFoundError(f"No se encontró el audio: {ruta_audio}")
+
+    y, sr = librosa.load(
+        ruta_audio,
+        sr=sr_objetivo,
+        offset=t_ini,
+        duration=(t_fin - t_ini)
+    )
+
+    return y, sr, ruta_audio
+
+
+def plot_mel_segmento(y, sr, ax, titulo: str | None = None):
+    """
+    Grafica un mel-espectrograma en un eje dado.
+    """
+    S = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=1024, hop_length=256, n_mels=64)
+    S_db = librosa.power_to_db(S, ref=np.max)
+
+    img = librosa.display.specshow(
+        S_db,
+        sr=sr,
+        hop_length=256,
+        x_axis="time",
+        y_axis="mel",
+        cmap="magma",
+        ax=ax
+    )
+    if titulo:
+        ax.set_title(titulo, fontsize=8)
+    return img
+
+
+def mostrar_muestra_espectrogramas_por_cluster(
+    df_cluster: pd.DataFrame,
+    sitio: str,
+    cluster: str,
+    audio_root: Path,
+    n_muestras: int = N_MUESTRAS_POR_CLUSTER,
+) -> pd.DataFrame:
+    """
+    Toma una muestra de hasta n_muestras segmentos de un cluster,
+    genera una grilla de mel-espectrogramas y guarda la figura en disco.
+    Devuelve el DataFrame de la muestra (para escucha posterior).
+    """
+    if len(df_cluster) == 0:
+        print(f"DataFrame vacío para {sitio} | {cluster}")
+        return df_cluster
+
+    n = min(n_muestras, len(df_cluster))
+    df_sample = df_cluster.sample(n=n, random_state=42).reset_index(drop=True)
+
+    n_cols = 5
+    n_rows = int(np.ceil(n / n_cols))
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows))
+    axes = np.array(axes).reshape(n_rows, n_cols)
+
+    for i, row in df_sample.iterrows():
+        r = i // n_cols
+        c = i % n_cols
+        ax = axes[r, c]
+
+        try:
+            y, sr, ruta_audio = cargar_segmento_audio(row, audio_root)
+        except FileNotFoundError:
+            ax.set_title(f"Audio no encontrado\n{row['archivo_origen']}", fontsize=8)
+            ax.axis("off")
+            continue
+
+        t_ini = row["Begin Time (s)"]
+        t_fin = row["End Time (s)"]
+        annotation = row["Annotation"] if "Annotation" in row.index else ""
+        sitio_row = row["sitio"] if "sitio" in row.index else sitio
+
+        titulo = f"{annotation}\n{ruta_audio.name}\n{sitio_row} | {t_ini:.1f}-{t_fin:.1f}s"
+        plot_mel_segmento(y, sr, ax, titulo=titulo)
+
+    # Apagar ejes sobrantes
+    total_plots = n_rows * n_cols
+    for j in range(n, total_plots):
+        r = j // n_cols
+        c = j % n_cols
+        axes[r, c].axis("off")
+
+    fig.suptitle(f"Sitio: {sitio} | {cluster} | n={n}", fontsize=10)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    carpeta_figuras_sitio = RUTA_FIGURAS / sitio
+    carpeta_figuras_sitio.mkdir(parents=True, exist_ok=True)
+    nombre_fig = f"{sitio}_{cluster}_muestra_{n}.png"
+    ruta_fig = carpeta_figuras_sitio / nombre_fig
+    fig.savefig(ruta_fig)
+    plt.close(fig)
+
+    print(f"✓ Figura guardada: {ruta_fig}")
+    return df_sample
+
+
+def cargar_umap_fase2_para_cluster(sitio: str, cluster: str) -> pd.DataFrame | None:
+    """
+    Carga el CSV de Fase 2 (UMAP + HDBSCAN) para un sitio y devuelve
+    solo las filas del cluster indicado (cluster_k).
+    """
+    nombre_csv = f"{sitio}_{SUFIJO_CORRIDA}_fase2_umap_hdbscan.csv"
+    ruta_csv = RUTA_FASE2 / nombre_csv
+
+    if not ruta_csv.exists():
+        print(f"⚠️ No se encontró el CSV de Fase 2 para {sitio}: {ruta_csv}")
+        return None
+
+    df_umap = pd.read_csv(ruta_csv)
+
+    # cluster viene como 'cluster_3', 'cluster_5', etc.
+    if not cluster.startswith("cluster_"):
+        print(f"⚠️ Formato de cluster inesperado: {cluster}")
+        return None
+
+    k = int(cluster.split("_")[1])
+
+    if "cluster_hdbscan" not in df_umap.columns:
+        print(f"⚠️ El CSV de Fase 2 no tiene columna 'cluster_hdbscan': {ruta_csv}")
+        return None
+
+    df_c = df_umap[df_umap["cluster_hdbscan"] == k].copy()
+    if df_c.empty:
+        print(f"⚠️ No hay filas para {sitio} | {cluster} en Fase 2.")
+        return None
+
+    return df_c
+
+def calcular_centroides_clusters(df_umap: pd.DataFrame) -> pd.DataFrame:
+    """
+    A partir del df_umap de Fase 2 (un sitio),
+    calcula el centroide en U1, U2, U3 para cada cluster_hdbscan (≠ -1).
+    Devuelve un DataFrame con columnas:
+      - cluster_hdbscan
+      - U1_c
+      - U2_c
+      - U3_c
+    """
+    df_val = df_umap[df_umap["cluster_hdbscan"] != -1].copy()
+    centroids = (
+        df_val
+        .groupby("cluster_hdbscan")[["U1", "U2", "U3"]]
+        .mean()
+        .rename(columns={"U1": "U1_c", "U2": "U2_c", "U3": "U3_c"})
+        .reset_index()
+    )
+    return centroids
+
+
+def matriz_distancias_centroides(centroids: pd.DataFrame) -> pd.DataFrame:
+    """
+    A partir de un DataFrame de centroides (cluster_hdbscan, U1_c, U2_c, U3_c),
+    calcula la distancia euclídea entre todos los pares de clusters.
+    Devuelve un DataFrame con columnas:
+      - cluster_i
+      - cluster_j
+      - dist
+    """
+    filas = []
+    for i, j in combinations(centroids["cluster_hdbscan"], 2):
+        ci = centroids[centroids["cluster_hdbscan"] == i][["U1_c", "U2_c", "U3_c"]].values[0]
+        cj = centroids[centroids["cluster_hdbscan"] == j][["U1_c", "U2_c", "U3_c"]].values[0]
+        d = np.linalg.norm(ci - cj)
+        filas.append({"cluster_i": i, "cluster_j": j, "dist": d})
+    return pd.DataFrame(filas)
+
+def proponer_grupos_fusion(df_dist: pd.DataFrame, umbral: float) -> list[set[int]]:
+    """
+    A partir de la matriz de distancias entre centroides y un umbral,
+    construye grupos de clusters que deberían fusionarse (componentes conexas).
+
+    Devuelve una lista de conjuntos, por ejemplo:
+      [{0, 3, 5}, {2, 7}, {8}]  # 8 queda solo, sin fusión
+    """
+    # Construir grafo no dirigido
+    vecinos = {}
+    for _, row in df_dist.iterrows():
+        i = int(row["cluster_i"])
+        j = int(row["cluster_j"])
+        d = row["dist"]
+        if d <= umbral:
+            vecinos.setdefault(i, set()).add(j)
+            vecinos.setdefault(j, set()).add(i)
+
+    # Asegurar que todos los clusters aparezcan aunque no tengan vecinos
+    todos = set(df_dist["cluster_i"]).union(set(df_dist["cluster_j"]))
+    for k in todos:
+        vecinos.setdefault(k, set())
+
+    # BFS/DFS para componentes conexas
+    visitados = set()
+    grupos = []
+
+    for k in todos:
+        if k in visitados:
+            continue
+        stack = [k]
+        comp = set()
+        while stack:
+            u = stack.pop()
+            if u in visitados:
+                continue
+            visitados.add(u)
+            comp.add(u)
+            for v in vecinos[u]:
+                if v not in visitados:
+                    stack.append(v)
+        grupos.append(comp)
+
+    return grupos
+
+def construir_mapa_fusion(grupos: list[set[int]]) -> dict[int, int]:
+    """
+    A partir de una lista de conjuntos de clusters originales (por ejemplo [{0,3,5}, {2,7}, {1}]),
+    construye un mapa: cluster_original -> cluster_fusionado_id (0,1,2,...).
+    """
+    mapa = {}
+    for nuevo_id, grupo in enumerate(grupos):
+        for k in grupo:
+            mapa[k] = nuevo_id
+    return mapa
+
+    
+def obtener_dos_representativos(df_cluster_st: pd.DataFrame, df_cluster_umap: pd.DataFrame) -> pd.DataFrame:
+    """
+    A partir de:
+      - df_cluster_st: selection table por cluster (Begin Time (s), archivo_origen, etc.)
+      - df_cluster_umap: filas del mismo cluster en el CSV de Fase 2 (U1, U2, U3, archivo_origen, tiempo_inicio)
+    Devuelve un DataFrame con las 2 filas del selection table que son más cercanas
+    al centroide del cluster en el espacio UMAP.
+    """
+    # Centroide en UMAP
+    for col in ["U1", "U2", "U3"]:
+        if col not in df_cluster_umap.columns:
+            raise ValueError(f"Falta columna {col} en df_cluster_umap")
+
+    centroide = df_cluster_umap[["U1", "U2", "U3"]].mean().values
+
+    # Distancia euclídea al centroide
+    coords = df_cluster_umap[["U1", "U2", "U3"]].values
+    dist = np.linalg.norm(coords - centroide, axis=1)
+    df_cluster_umap = df_cluster_umap.copy()
+    df_cluster_umap["dist_centroide"] = dist
+
+    # Tomar las 2 más cercanas
+    df_top2_umap = df_cluster_umap.nsmallest(2, "dist_centroide")
+
+    # Hacer match con selection table:
+    # usamos archivo_origen + tiempo_inicio ≈ Begin Time (s)
+    filas_st = []
+    for _, row_u in df_top2_umap.iterrows():
+        archivo = row_u["archivo_origen"]
+        t_ini = row_u["tiempo_inicio"]
+
+        mask = (
+            (df_cluster_st["archivo_origen"] == archivo) &
+            (np.isclose(df_cluster_st["Begin Time (s)"], t_ini, atol=1e-3))
+        )
+        candidatos = df_cluster_st[mask]
+        if candidatos.empty:
+            mask2 = (
+                (df_cluster_st["archivo_origen"] == archivo) &
+                (np.isclose(df_cluster_st["Begin Time (s)"], t_ini, atol=0.1))
+            )
+            candidatos = df_cluster_st[mask2]
+
+        if not candidatos.empty:
+            filas_st.append(candidatos.iloc[0])
+
+    if not filas_st:
+        print("⚠️ No se pudieron matchear los representativos con el selection table.")
+        return df_cluster_st.head(2).copy()
+
+    df_rep = pd.DataFrame(filas_st).reset_index(drop=True)
+    return df_rep
+
+
+def inspeccionar_representativos_por_cluster(
+    df_cluster_st: pd.DataFrame,
+    df_cluster_umap: pd.DataFrame,
+    sitio: str,
+    cluster: str,
+    audio_root: Path,
+):
+    """
+    Obtiene los 2 segmentos más representativos del cluster (en UMAP),
+    grafica sus espectrogramas y guarda:
+      - la figura de espectrogramas,
+      - los segmentos como archivos .wav.
+    """
+    df_rep = obtener_dos_representativos(df_cluster_st, df_cluster_umap)
+
+    if df_rep.empty:
+        print(f"⚠️ No hay representativos para {sitio} | {cluster}")
+        return
+
+    # Figura con espectrogramas
+    fig, axes = plt.subplots(1, len(df_rep), figsize=(6 * len(df_rep), 4))
+
+    if len(df_rep) == 1:
+        axes = [axes]
+
+    for ax, (_, row) in zip(axes, df_rep.iterrows()):
+        y, sr, ruta_audio = cargar_segmento_audio(row, audio_root)
+        t_ini = row["Begin Time (s)"]
+        t_fin = row["End Time (s)"]
+        annotation = row["Annotation"] if "Annotation" in row.index else ""
+        sitio_row = row["sitio"] if "sitio" in row.index else sitio
+
+        titulo = f"{annotation}\n{ruta_audio.name}\n{sitio_row} | {t_ini:.1f}-{t_fin:.1f}s"
+        plot_mel_segmento(y, sr, ax, titulo=titulo)
+
+    fig.suptitle(f"Representativos | {sitio} | {cluster}", fontsize=10)
+    plt.tight_layout()
+    carpeta_figuras_sitio = RUTA_FIGURAS / sitio
+    carpeta_figuras_sitio.mkdir(parents=True, exist_ok=True)
+    ruta_fig = carpeta_figuras_sitio / f"{sitio}_{cluster}_representativos.png"
+    fig.savefig(ruta_fig)
+    plt.close(fig)
+    print(f"✓ Figura de representativos guardada: {ruta_fig}")
+
+    # Guardar segmentos como .wav en la misma carpeta
+    guardar_segmentos_representativos(
+        df_rep=df_rep,
+        sitio=sitio,
+        cluster=cluster,
+        audio_root=audio_root,
+        carpeta_figuras=RUTA_FIGURAS,
+    )
+
+
+def guardar_segmentos_representativos(
+    df_rep: pd.DataFrame,
+    sitio: str,
+    cluster: str,
+    audio_root: Path,
+    carpeta_figuras: Path,
+):
+    """
+    Guarda cada segmento representativo como archivo .wav en la misma carpeta
+    donde se guardan las figuras del sitio.
+
+    Nombre de archivo:
+      {sitio}_{cluster}_{i}_{nombrebase}_{tini:.2f}-{tfin:.2f}s.wav
+
+    Ejemplo:
+      CANTERA1Tapy_cluster_3_1_CANTERA1TAPY_20250621_053602_12.50-15.00s.wav
+    """
+    carpeta_sitio = carpeta_figuras / sitio
+    carpeta_sitio.mkdir(parents=True, exist_ok=True)
+
+    for i, (_, row) in enumerate(df_rep.iterrows(), start=1):
+        y, sr, ruta_audio = cargar_segmento_audio(row, audio_root)
+        t_ini = float(row["Begin Time (s)"])
+        t_fin = float(row["End Time (s)"])
+
+        nombre_base = Path(row["archivo_origen"]).stem  # sin extensión
+        nombre_wav = (
+            f"{sitio}_{cluster}_{i}_"
+            f"{nombre_base}_{t_ini:.2f}-{t_fin:.2f}s.wav"
+        )
+
+        ruta_wav = carpeta_sitio / nombre_wav
+        sf.write(ruta_wav, y, sr)
+        print(f"   ↳ Segmento guardado: {ruta_wav}")
+
+# ------------------------------------------------
+# BUCLE PRINCIPAL
+# ------------------------------------------------
+
+def main():
+    for sitio in SITIOS:
+        carpeta_sitio = RUTA_ST_CLUSTER / sitio
+        if not carpeta_sitio.exists():
+            print(f"⚠️ No existe carpeta de selection tables por cluster para sitio: {sitio}")
+            continue
+
+        clusters = sorted(
+            [p.name for p in carpeta_sitio.iterdir() if p.is_dir() and p.name.startswith("cluster_")]
+        )
+
+        if not clusters:
+            print(f"⚠️ No se encontraron clusters para sitio: {sitio}")
+            continue
+
+        print(f"\n==============================")
+        print(f"Sitio: {sitio} | Clusters encontrados: {clusters}")
+        print(f"==============================")
+
+        for cluster in clusters:
+            print(f"\n--- Procesando {sitio} | {cluster} ---")
+            df_cluster = cargar_selection_table_por_cluster(sitio, cluster)
+            if df_cluster is None:
+                continue
+
+            df_umap_cluster = cargar_umap_fase2_para_cluster(sitio, cluster)
+            if df_umap_cluster is None:
+                continue
+
+            # Si querés seguir generando la grilla de 10, podés descomentar:
+            # df_sample = mostrar_muestra_espectrogramas_por_cluster(
+            #     df_cluster=df_cluster,
+            #     sitio=sitio,
+            #     cluster=cluster,
+            #     audio_root=AUDIO_ROOT,
+            #     n_muestras=N_MUESTRAS_POR_CLUSTER,
+            # )
+
+            # Opción actual: solo los 2 más representativos
+            inspeccionar_representativos_por_cluster(
+                df_cluster_st=df_cluster,
+                df_cluster_umap=df_umap_cluster,
+                sitio=sitio,
+                cluster=cluster,
+                audio_root=AUDIO_ROOT,
+            )
+
+            # Si quisieras escuchar más segmentos además de los representativos:
+            # escuchar_segmentos(df_cluster, AUDIO_ROOT, max_n=5)
+
+
+if __name__ == "__main__":
+    main()

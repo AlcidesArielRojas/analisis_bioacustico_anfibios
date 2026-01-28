@@ -1,0 +1,241 @@
+from pathlib import Path
+import os
+import pandas as pd
+import numpy as np
+import librosa
+import librosa.display
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics.pairwise import cosine_similarity
+from IPython.display import Audio, display
+
+# --- Configuración de rutas (ajusta según tu estructura) ---
+BASE_DIR = Path(r"C:/Users/User/Proyecto_Paisajes_Sonoros_Repositorio_Local")
+RUTA_RESULTADOS = BASE_DIR / "resultados"
+RUTA_FIGURAS = BASE_DIR / "figuras_CANTERA1Tapy"
+
+# Esta es la carpeta raíz donde están los audios del sitio
+# Si tus .wav están en D:/CANTERA1Tapy/Data/<archivos.wav>, dejalo así:
+RUTA_AUDIO_BASE = Path(r"D:/CANTERA1Tapy/Data")
+
+CSV_FASE2 = RUTA_RESULTADOS / "CANTERA1Tapy_fase2_PCA20_UMAPnn60_md0.3_nc2_HDBmin800_ms65_eps0.03_eom_PAR.csv"
+
+# --- Parámetros de espectrograma ---
+SR = 22050
+N_FFT = 1024
+HOP_LENGTH = 256
+N_MELS = 64
+FMIN = 100
+FMAX = 8000
+DURATION_MAX = 4.0
+TOP_K_PER_CLUSTER = 20
+
+# --- Utilidad: resolver ruta de audio de forma robusta ---
+def resolve_audio_path(archivo_origen: str, base_dir: Path) -> Path:
+    """
+    Devuelve una ruta válida al archivo de audio:
+    - Si archivo_origen es absoluto y existe, lo usa.
+    - Si es relativo, prueba:
+      base_dir / archivo_origen
+      base_dir / Path(archivo_origen).name
+      base_dir / "CANTERA1Tapy" / Path(archivo_origen).name
+    - Si no encuentra, intenta glob por nombre en subcarpetas.
+    """
+    p = Path(archivo_origen)
+
+    # Caso 1: ruta absoluta válida
+    if p.is_absolute() and p.exists():
+        return p
+
+    # Caso 2: relativo directo
+    cand = base_dir / p
+    if cand.exists():
+        return cand
+
+    # Caso 3: usar solo el nombre del archivo
+    name = p.name
+    cand2 = base_dir / name
+    if cand2.exists():
+        return cand2
+
+    # Caso 4: subcarpeta redundante (evitar duplicación)
+    cand3 = base_dir / "CANTERA1Tapy" / name
+    if cand3.exists():
+        return cand3
+
+    # Caso 5: búsqueda por nombre en subdirectorios
+    matches = list(base_dir.rglob(name))
+    if matches:
+        return matches[0]
+
+    # Si no se encuentra, devolver la mejor conjetura (para loggear)
+    return cand
+
+# --- Cargar CSV y filtrar ruido ---
+df = pd.read_csv(CSV_FASE2)
+df = df[df["cluster_hdbscan"] != -1].copy()
+clusters = sorted(df["cluster_hdbscan"].unique())
+
+# --- Cargar audio y espectrograma ---
+def load_segment_audio(file_path: Path, t_start: float, t_end: float):
+    """
+    Carga un segmento [t_start, t_end] del archivo, normaliza duración a DURATION_MAX
+    y amplitud a [-1, 1]. Maneja errores con mensajes claros.
+    """
+    if not file_path.exists():
+        raise FileNotFoundError(f"No existe el archivo: {file_path}")
+
+    # Preferir backend soundfile si está disponible para evitar warnings
+    try:
+        import soundfile as sf
+        y, sr_native = sf.read(str(file_path), always_2d=False)
+        # Si es estéreo, tomar canal mono
+        if y.ndim > 1:
+            y = y.mean(axis=1)
+        # Resample si es necesario
+        if sr_native != SR:
+            y = librosa.resample(y, orig_sr=sr_native, target_sr=SR)
+        sr = SR
+    except Exception:
+        # Fallback a librosa.load
+        y, sr = librosa.load(str(file_path), sr=SR)
+
+    s = int(t_start * SR)
+    e = int(t_end * SR)
+    y_seg = y[s:e]
+
+    # Normalizar duración
+    max_len = int(DURATION_MAX * SR)
+    y_seg = y_seg[:max_len]
+    if len(y_seg) < max_len:
+        y_seg = np.pad(y_seg, (0, max_len - len(y_seg)), mode="constant")
+
+    # Normalizar amplitud
+    peak = np.max(np.abs(y_seg)) if len(y_seg) else 0.0
+    if peak > 0:
+        y_seg = y_seg / peak
+
+    return y_seg, SR
+
+def compute_mel_spectrogram(y: np.ndarray):
+    S = librosa.feature.melspectrogram(
+        y=y, sr=SR, n_fft=N_FFT, hop_length=HOP_LENGTH,
+        n_mels=N_MELS, fmin=FMIN, fmax=FMAX, power=2.0
+    )
+    return librosa.power_to_db(S, ref=np.max)
+
+# --- Selección de segmentos por cluster ---
+def pick_segments_for_cluster(df_cluster: pd.DataFrame):
+    if {"U1", "U2"}.issubset(df_cluster.columns):
+        c1, c2 = df_cluster["U1"].mean(), df_cluster["U2"].mean()
+        df_cluster = df_cluster.assign(
+            dist_center=np.sqrt((df_cluster["U1"] - c1) ** 2 + (df_cluster["U2"] - c2) ** 2)
+        )
+        return df_cluster.sort_values("dist_center").head(TOP_K_PER_CLUSTER)
+    else:
+        return df_cluster.sample(n=min(TOP_K_PER_CLUSTER, len(df_cluster)), random_state=123)
+
+# --- Medoide por similitud coseno en mel ---
+def choose_medoid_mel(mel_list):
+    X = np.array([m.flatten() for m in mel_list])
+    sim = cosine_similarity(X)
+    avg_sim = sim.mean(axis=1)
+    return int(np.argmax(avg_sim)), avg_sim
+
+# --- Gráficas ---
+def plot_cluster_montage(cluster_id, specs, metas):
+    rows, cols = 4, 5
+    fig, axes = plt.subplots(rows, cols, figsize=(20, 12))
+    axes = axes.flatten()
+    for i, ax in enumerate(axes):
+        if i < len(specs):
+            librosa.display.specshow(
+                specs[i], sr=SR, hop_length=HOP_LENGTH,
+                x_axis="time", y_axis="mel", fmin=FMIN, fmax=FMAX, ax=ax, cmap="magma"
+            )
+            fn = Path(metas[i]["archivo_origen"]).name if "archivo_origen" in metas[i] else "segmento"
+            ti = metas[i].get("tiempo_inicio", 0.0)
+            tf = metas[i].get("tiempo_fin", 0.0)
+            ax.set_title(f"{fn}\n{ti:.2f}-{tf:.2f}s", fontsize=9)
+        else:
+            ax.axis("off")
+    fig.suptitle(f"Cluster {cluster_id} — {len(specs)} espectrogramas", fontsize=16)
+    out = RUTA_FIGURAS / f"cluster_{cluster_id}_montaje.png"
+    fig.savefig(out, dpi=200)
+    plt.close(fig)
+    return out
+
+def plot_representative(cluster_id, spec, meta):
+    fig, ax = plt.subplots(figsize=(10, 4))
+    librosa.display.specshow(
+        spec, sr=SR, hop_length=HOP_LENGTH,
+        x_axis="time", y_axis="mel", fmin=FMIN, fmax=FMAX, ax=ax, cmap="magma"
+    )
+    fn = Path(meta["archivo_origen"]).name if "archivo_origen" in meta else "segmento"
+    ti = meta.get("tiempo_inicio", 0.0)
+    tf = meta.get("tiempo_fin", 0.0)
+    ax.set_title(f"Cluster {cluster_id} — Representante\n{fn} {ti:.2f}-{tf:.2f}s")
+    out = RUTA_FIGURAS / f"cluster_{cluster_id}_representante.png"
+    fig.savefig(out, dpi=200)
+    plt.close(fig)
+    return out
+
+# --- Loop principal por clusters ---
+resumen = []
+for cid in clusters:
+    df_c = df[df["cluster_hdbscan"] == cid].copy()
+    df_sel = pick_segments_for_cluster(df_c)
+
+    specs, metas, audios = [], [], []
+    for _, row in df_sel.iterrows():
+        # Resolver ruta robusta
+        file_path = resolve_audio_path(str(row["archivo_origen"]), RUTA_AUDIO_BASE)
+
+        if not file_path.exists():
+            print(f"⚠️ No encontrado: {file_path}. Intentá revisar 'archivo_origen' en el CSV.")
+            continue
+
+        try:
+            y, sr = load_segment_audio(file_path, row["tiempo_inicio"], row["tiempo_fin"])
+            S_db = compute_mel_spectrogram(y)
+        except Exception as e:
+            print(f"⚠️ Error cargando {file_path}: {e}")
+            continue
+
+        specs.append(S_db)
+        metas.append({
+            "archivo_origen": str(file_path),
+            "tiempo_inicio": row.get("tiempo_inicio", 0.0),
+            "tiempo_fin": row.get("tiempo_fin", 0.0)
+        })
+        audios.append(y)
+
+    if not specs:
+        print(f"Cluster {cid}: sin ejemplos válidos (rutas no encontradas).")
+        continue
+
+    medoid_idx, avg_sim = choose_medoid_mel(specs)
+    rep_spec = specs[medoid_idx]
+    rep_meta = metas[medoid_idx]
+    rep_audio = audios[medoid_idx]
+
+    montage_path = plot_cluster_montage(cid, specs, metas)
+    rep_path = plot_representative(cid, rep_spec, rep_meta)
+
+    print(f"Cluster {cid}: representante -> {Path(rep_meta['archivo_origen']).name} "
+          f"{rep_meta['tiempo_inicio']:.2f}-{rep_meta['tiempo_fin']:.2f}s | sim_prom={avg_sim[medoid_idx]:.3f}")
+    display(Audio(rep_audio, rate=SR))
+
+    resumen.append({
+        "cluster": cid,
+        "n_mostrados": len(specs),
+        "montaje_png": str(montage_path),
+        "representante_png": str(rep_path),
+        "representante_audio_path": rep_meta["archivo_origen"],
+        "tiempo_inicio": rep_meta["tiempo_inicio"],
+        "tiempo_fin": rep_meta["tiempo_fin"],
+        "avg_sim_medoid": float(avg_sim[medoid_idx])
+    })
+
+pd.DataFrame(resumen).to_csv(RUTA_RESULTADOS / "CANTERA1Tapy_clusters_representantes_resumen.csv", index=False)
+print("📄 Resumen guardado en:", RUTA_RESULTADOS / "CANTERA1Tapy_clusters_representantes_resumen.csv")

@@ -1,0 +1,55 @@
+==============================
+Fase 2 para sitio: BO-81Tapyta
+==============================
+📄 Selection Table para Raven guardada en: C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados\BO-81Tapyta_v2_horario18a06_insectos6a12_fase2_raven_selection_table.txt
+✅ Fase 2 completada.
+- Clusters detectados (sin ruido): 2
+- Proporción de ruido: 0.00
+- Silhouette (sin ruido): 0.49165183305740356
+- Davies-Bouldin (menor es mejor): 0.5737828918391664
+- Calinski-Harabasz (mayor es mejor): 93119.34611384363
+
+==============================
+Fase 2 para sitio: BO-82Tapyta
+==============================
+📄 Selection Table para Raven guardada en: C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados\BO-82Tapyta_v2_horario18a06_insectos6a12_fase2_raven_selection_table.txt
+✅ Fase 2 completada.
+- Clusters detectados (sin ruido): 8
+- Proporción de ruido: 0.05
+- Silhouette (sin ruido): 0.18043619394302368
+- Davies-Bouldin (menor es mejor): 0.893003061722224
+- Calinski-Harabasz (mayor es mejor): 142751.8522689268
+
+==============================
+Fase 2 para sitio: CANTERA1Tapy
+==============================
+📄 Selection Table para Raven guardada en: C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados\CANTERA1Tapy_v2_horario18a06_insectos6a12_fase2_raven_selection_table.txt
+✅ Fase 2 completada.
+- Clusters detectados (sin ruido): 29
+- Proporción de ruido: 0.09
+- Silhouette (sin ruido): 0.47399845719337463
+- Davies-Bouldin (menor es mejor): 0.7806277499361399
+- Calinski-Harabasz (mayor es mejor): 130059.20176369857
+
+==============================
+Fase 2 para sitio: EU-41Tapyta
+==============================
+📄 Selection Table para Raven guardada en: C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados\EU-41Tapyta_v2_horario18a06_insectos6a12_fase2_raven_selection_table.txt
+✅ Fase 2 completada.
+- Clusters detectados (sin ruido): 5
+- Proporción de ruido: 0.08
+- Silhouette (sin ruido): -0.13818800449371338
+- Davies-Bouldin (menor es mejor): 1.0552386939376948
+- Calinski-Harabasz (mayor es mejor): 15512.322466374055
+
+==============================
+Fase 2 para sitio: PA-41Tapyta
+==============================
+📄 Selection Table para Raven guardada en: C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados\PA-41Tapyta_v2_horario18a06_insectos6a12_fase2_raven_selection_table.txt
+✅ Fase 2 completada.
+- Clusters detectados (sin ruido): 2
+- Proporción de ruido: 0.05
+- Silhouette (sin ruido): -0.0483880452811718
+- Davies-Bouldin (menor es mejor): 1.649050773930374
+- Calinski-Harabasz (mayor es mejor): 1967.6131885878588
+>>>

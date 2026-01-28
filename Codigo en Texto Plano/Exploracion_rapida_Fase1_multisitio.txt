@@ -1,0 +1,144 @@
+# ================================================================
+# Exploración rápida Fase 1 (multi-sitio):
+# PCA (varianza explicada) + UMAP 2D con subset
+# Corrida: v2_horario18a06_insectos6a12
+# ================================================================
+
+from pathlib import Path
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.preprocessing import RobustScaler
+from sklearn.decomposition import PCA
+import umap
+
+# ---------------- Configuración global de visualización ----------------
+sns.set_theme(context="notebook", style="whitegrid", palette="viridis")
+plt.rcParams["figure.figsize"] = (8, 6)
+plt.rcParams["figure.dpi"] = 120
+plt.rcParams["axes.titleweight"] = "bold"
+plt.rcParams["axes.labelsize"] = 11
+
+# ---------------- Parámetros de la corrida ----------------
+BASE_DIR = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local")
+RUTA_RESULTADOS = BASE_DIR / "resultados"
+
+# Sitios y sufijo de la última Fase 1
+SITIOS = [
+    "BO-81Tapyta",
+    "BO-82Tapyta",
+    "CANTERA1Tapy",
+    "EU-41Tapyta",
+    "PA-41Tapyta",
+]
+SUFIJO_CORRIDA = "v2_horario18a06_insectos6a12"
+
+# Submuestreo para exploración
+MUESTRA_MAX = 50_000  # podés bajar/subir según RAM/tiempo
+
+# Parámetros de PCA y UMAP para exploración
+PCA_COMPONENTS_EXPLORACION = 30
+UMAP_N_NEIGHBORS = 60
+UMAP_MIN_DIST = 0.3
+UMAP_METRIC = "cosine"
+UMAP_N_COMPONENTS = 2  # solo 2D para exploración rápida
+
+# Carpeta para guardar figuras
+RUTA_FIGURAS = BASE_DIR / "figuras_exploracion_fase1"
+RUTA_FIGURAS.mkdir(parents=True, exist_ok=True)
+
+# ---------------- Funciones auxiliares ----------------
+def muestrear_df(df: pd.DataFrame, n_max: int) -> pd.DataFrame:
+    if len(df) > n_max:
+        return df.sample(n_max, random_state=42)
+    return df
+
+def guardar_fig(nombre: str):
+    plt.savefig(RUTA_FIGURAS / f"{nombre}.png", bbox_inches="tight")
+
+def explorar_sitio(site: str):
+    print("\n" + "="*60)
+    print(f"Exploración Fase 1 para sitio: {site}")
+    print("="*60)
+
+    ruta_parquet = RUTA_RESULTADOS / f"features_{site}_{SUFIJO_CORRIDA}.parquet"
+    if not ruta_parquet.exists():
+        print(f"⚠️ No se encontró el archivo de features para {site}: {ruta_parquet}")
+        return
+
+    print(f"Cargando datos desde: {ruta_parquet}")
+    df = pd.read_parquet(ruta_parquet)
+    print(f"Segmentos: {len(df)} | Columnas: {len(df.columns)}")
+
+    # Seleccionar columnas MFCC
+    cols_mfcc_mean = [c for c in df.columns if c.startswith("mfcc_mean_")]
+    cols_mfcc_sd   = [c for c in df.columns if c.startswith("mfcc_sd_")]
+    features = cols_mfcc_mean + cols_mfcc_sd
+
+    if not features:
+        print("⚠️ No se encontraron columnas MFCC en este archivo. Se salta el sitio.")
+        return
+
+    # Submuestreo para exploración
+    df_sub = muestrear_df(df[features], MUESTRA_MAX)
+    X = df_sub.values
+
+    # Escalado robusto
+    scaler = RobustScaler()
+    X_std = scaler.fit_transform(X)
+
+    # ---------------- 1) PCA: varianza explicada ----------------
+    print("Calculando PCA para exploración...")
+    pca = PCA(n_components=min(PCA_COMPONENTS_EXPLORACION, X_std.shape[1]))
+    X_pca = pca.fit_transform(X_std)
+
+    var_exp = pca.explained_variance_ratio_
+    var_exp_acum = np.cumsum(var_exp)
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(range(1, len(var_exp) + 1), var_exp_acum, marker="o")
+    plt.xlabel("Número de componentes PCA")
+    plt.ylabel("Varianza explicada acumulada")
+    plt.title(f"{site} - PCA (varianza explicada acumulada)")
+    plt.grid(True, alpha=0.3)
+    guardar_fig(f"{site}_{SUFIJO_CORRIDA}_pca_varianza_acumulada")
+    plt.show()
+
+    print("Varianza explicada acumulada (primeras 10 componentes):")
+    for i in range(min(10, len(var_exp_acum))):
+        print(f"  PC{i+1}: {var_exp_acum[i]:.3f}")
+
+    # ---------------- 2) UMAP 2D rápido ----------------
+    print("Calculando UMAP 2D para exploración...")
+    umap_model = umap.UMAP(
+        n_neighbors=UMAP_N_NEIGHBORS,
+        min_dist=UMAP_MIN_DIST,
+        n_components=UMAP_N_COMPONENTS,
+        metric=UMAP_METRIC,
+        random_state=42,   # acá podés fijar semilla para reproducibilidad
+        n_jobs=-1          # paralelización para exploración
+    )
+    X_umap = umap_model.fit_transform(X_pca)
+
+    plt.figure(figsize=(7, 6))
+    plt.scatter(X_umap[:, 0], X_umap[:, 1], s=3, alpha=0.5)
+    plt.xlabel("UMAP-1")
+    plt.ylabel("UMAP-2")
+    plt.title(f"{site} - UMAP 2D (subset, sin clustering)")
+    guardar_fig(f"{site}_{SUFIJO_CORRIDA}_umap2d_exploracion")
+    plt.show()
+
+    print("Exploración para este sitio completada.")
+
+# ---------------- Orquestador ----------------
+if __name__ == "__main__":
+    print("=== Exploración rápida Fase 1: PCA + UMAP 2D (multi-sitio) ===")
+    print(f"Resultados esperados en: {RUTA_FIGURAS}\n")
+
+    for sitio in SITIOS:
+        explorar_sitio(sitio)
+
+    print("\n✅ Exploración completada para todos los sitios (donde había datos).")

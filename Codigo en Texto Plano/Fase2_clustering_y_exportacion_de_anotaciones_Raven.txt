@@ -1,0 +1,203 @@
+# ================================================================
+# Fase 2 (no interactiva): Reducción de dimensiones + K-means
+# Visualizaciones estáticas con matplotlib + seaborn
+# Autor: Alcides Rojas (adaptado)
+# ================================================================
+
+from pathlib import Path
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+
+# -----------------------------
+# Configuración general
+# -----------------------------
+
+ruta_salida = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados")
+ruta_features = ruta_salida / "features.parquet"
+ruta_salida.mkdir(parents=True, exist_ok=True)
+
+METODO_DIM = "PCA"             # Cambio a PCA
+N_NEIGHBORS = 80               # Restaurado (no se usa en PCA)
+MIN_DIST = 0.10                # Se mantiene por compatibilidad
+USAR_SEMILLA = True            # Desactivado paralelismo
+SEMILLA = 123
+K_CLUSTERS = 10
+EXCLUIR_BO = False
+PRIORIZAR_SOLO_PA = False
+UMBRAL_SD1 = 10.0              # Restaurado
+
+FEATURES_BASE = ["mfcc_mean_1", "mfcc_mean_2", "mfcc_mean_3"]
+INCLUIR_SD = True
+FEATURES_SD = ["mfcc_sd_1", "mfcc_sd_2", "mfcc_sd_3"] if INCLUIR_SD else []
+
+sns.set_theme(context="talk", style="whitegrid", palette="tab20")
+plt.rcParams["figure.figsize"] = (12, 8)
+plt.rcParams["savefig.dpi"] = 200
+
+# -----------------------------
+# 1) Carga de datos
+# -----------------------------
+
+if not ruta_features.exists():
+    raise FileNotFoundError(f"No se encontró el parquet de Fase 1: {ruta_features}")
+
+df = pd.read_parquet(ruta_features)
+
+# -----------------------------
+# 2) Selección de features y filtros acústicos
+# -----------------------------
+
+features = [f for f in FEATURES_BASE + FEATURES_SD if f in df.columns]
+if len([f for f in FEATURES_BASE if f in df.columns]) < len(FEATURES_BASE):
+    raise ValueError("Faltan columnas mfcc_mean_1..3 en el parquet.")
+
+df_filtrado = df.copy()
+
+if EXCLUIR_BO and "sitio" in df_filtrado.columns:
+    df_filtrado = df_filtrado[~df_filtrado["sitio"].str.contains("BO", case=False, na=False)]
+
+if PRIORIZAR_SOLO_PA and "sitio" in df_filtrado.columns:
+    df_filtrado = df_filtrado[df_filtrado["sitio"].str.contains("PA", case=False, na=False)]
+
+if "mfcc_sd_1" in df_filtrado.columns:
+    df_filtrado = df_filtrado[df_filtrado["mfcc_sd_1"] >= UMBRAL_SD1]
+
+# Usamos solo una fracción del dataset para pruebas
+df_filtrado = df_filtrado.sample(frac=0.3, random_state=SEMILLA)
+
+if len(df_filtrado) < 50:
+    print("Advertencia: pocos segmentos tras los filtros.")
+
+# -----------------------------
+# 3) Estandarización y reducción de dimensiones
+# -----------------------------
+
+X = df_filtrado[features].dropna()
+idx = X.index
+
+scaler = StandardScaler()
+X_std = scaler.fit_transform(X)
+
+pca = PCA(n_components=2, random_state=SEMILLA)
+comps = pca.fit_transform(X_std)
+emb_df = pd.DataFrame({"DIM1": comps[:, 0], "DIM2": comps[:, 1]}, index=idx)
+var_exp = float(np.sum(pca.explained_variance_ratio_[:2]))
+
+df_plot = df_filtrado.loc[idx].copy()
+df_plot["DIM1"] = emb_df["DIM1"].values
+df_plot["DIM2"] = emb_df["DIM2"].values
+
+# -----------------------------
+# 4) Clustering K-means
+# -----------------------------
+
+kmeans = KMeans(n_clusters=K_CLUSTERS, n_init=10, random_state=SEMILLA)
+labels = kmeans.fit_predict(emb_df.values)
+df_plot["cluster"] = labels
+
+# -----------------------------
+# 5) Visualización principal
+# -----------------------------
+
+titulo = (f"{METODO_DIM.upper()} + K-means (k={K_CLUSTERS}) | "
+          f"sd1≥{UMBRAL_SD1} | "
+          f"{'solo PA | ' if PRIORIZAR_SOLO_PA else ''}"
+          f"{'sin BO | ' if EXCLUIR_BO else ''}"
+          f"semilla {SEMILLA}")
+
+fig, ax = plt.subplots()
+sns.scatterplot(
+    data=df_plot,
+    x="DIM1", y="DIM2",
+    hue="cluster",
+    palette="tab20",
+    s=20,
+    linewidth=0,
+    alpha=0.85,
+    ax=ax
+)
+ax.set_title(titulo, fontsize=16)
+ax.set_xlabel("Componente 1", fontsize=12)
+ax.set_ylabel("Componente 2", fontsize=12)
+ax.legend(title="Cluster", bbox_to_anchor=(1.02, 1), loc="upper left", frameon=False)
+sns.despine()
+plt.tight_layout()
+plt.savefig(ruta_salida / "fase2_clusters_scatter.png")
+plt.close(fig)
+
+# -----------------------------
+# 6) Visualizaciones complementarias
+# -----------------------------
+
+fig2, ax2 = plt.subplots()
+sns.boxplot(
+    data=df_plot,
+    x="cluster",
+    y="mfcc_mean_1",
+    palette="tab20",
+    ax=ax2
+)
+ax2.set_title("Distribución de mfcc_mean_1 por cluster", fontsize=15)
+ax2.set_xlabel("Cluster")
+ax2.set_ylabel("mfcc_mean_1")
+sns.despine()
+plt.tight_layout()
+plt.savefig(ruta_salida / "fase2_boxplot_mfcc_mean1_por_cluster.png")
+plt.close(fig2)
+
+if "sitio" in df_plot.columns:
+    fig3, ax3 = plt.subplots(figsize=(14, 8))
+    sns.boxplot(
+        data=df_plot,
+        x="sitio",
+        y="mfcc_mean_1",
+        palette="tab20",
+        ax=ax3
+    )
+    ax3.set_title("Distribución de mfcc_mean_1 por sitio", fontsize=15)
+    ax3.set_xlabel("Sitio")
+    ax3.set_ylabel("mfcc_mean_1")
+    plt.xticks(rotation=45, ha="right")
+    sns.despine()
+    plt.tight_layout()
+    plt.savefig(ruta_salida / "fase2_boxplot_mfcc_mean1_por_sitio.png")
+    plt.close(fig3)
+
+# -----------------------------
+# 7) Resúmenes y exportación
+# -----------------------------
+
+cols_resumen = {
+    "conteo": ("cluster", "size"),
+    "mean1": ("mfcc_mean_1", "mean"),
+    "mean2": ("mfcc_mean_2", "mean"),
+    "mean3": ("mfcc_mean_3", "mean"),
+}
+if "mfcc_sd_1" in df_plot.columns:
+    cols_resumen["sd1_prom"] = ("mfcc_sd_1", "mean")
+
+resumen_cluster = df_plot.groupby("cluster").agg(**cols_resumen)
+resumen_cluster.to_csv(ruta_salida / "fase2_resumen_por_cluster.csv")
+
+if "sitio" in df_plot.columns:
+    cols_sitio = {
+        "conteo": ("sitio", "size"),
+        "mediana_mean1": ("mfcc_mean_1", "median"),
+        "mediana_mean2": ("mfcc_mean_2", "median"),
+    }
+    if "mfcc_sd_1" in df_plot.columns:
+        cols_sitio["sd1_prom"] = ("mfcc_sd_1", "mean")
+
+    resumen_sitio = df_plot.groupby("sitio").agg(**cols_sitio)
+    resumen_sitio.to_csv(ruta_salida / "fase2_resumen_por_sitio.csv")
+
+cols_export = ["DIM1", "DIM2", "cluster"] + [c for c in FEATURES_BASE + FEATURES_SD if c in df_plot.columns]
+cols_export += [c for c in ["sitio", "archivo_origen", "tiempo_inicio", "tiempo_fin"] if c in df_plot.columns]
+df_plot[cols_export].to_csv(ruta_salida / "fase2_embedding_clusters.csv", index=False)
+
+print("Fase 2 no interactiva completada.")
