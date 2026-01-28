@@ -5,6 +5,7 @@
 !*.py
 !*.png
 !*.txt
+!*.wav
 
 # No ignorar el archivo .gitignore en sí
 !.gitignore

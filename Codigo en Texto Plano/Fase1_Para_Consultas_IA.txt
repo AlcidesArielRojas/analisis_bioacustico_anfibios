@@ -218,24 +218,3 @@ if __name__ == "__main__":
     validar_entorno()
     for sitio in SITIOS:
         correr_fase1_para_sitio(sitio)
-
-# -----------------------------
-# Fusión de BO-81 + BO-82 → BO-Tapyta
-# -----------------------------
-print("\n🔗 Fusionando BO-81Tapyta y BO-82Tapyta en BO-Tapyta...")
-
-ruta_a = ruta_salida / f"features_BO-81Tapyta_{SUFIJO_CORRIDA}.parquet"
-ruta_b = ruta_salida / f"features_BO-82Tapyta_{SUFIJO_CORRIDA}.parquet"
-ruta_fusion = ruta_salida / f"features_BO-Tapyta_{SUFIJO_CORRIDA}.parquet"
-
-df_a = pd.read_parquet(ruta_a)
-df_b = pd.read_parquet(ruta_b)
-
-df_a["sitio"] = "BO-Tapyta"
-df_b["sitio"] = "BO-Tapyta"
-
-df_fusion = pd.concat([df_a, df_b], ignore_index=True)
-df_fusion.to_parquet(ruta_fusion, index=False)
-
-print(f"✅ Features fusionados guardados en: {ruta_fusion}")
-print(f"Total segmentos fusionados: {len(df_fusion)}")
