@@ -1,17 +1,19 @@
 # =============================================================================
 # Script_F_Verificacion_Subclustering.py
 # Campaña Nov-Dic 2024 — Paisajes Sonoros Tapytá
-# Figura F: Verificacion del subclustering con espectrogramas
+# Figuras F1/F2/F3: Verificación del subclustering del Cluster 0 (PA-17)
 #
-# Pregunta a responder: "Los 7 subclusters del Cluster 0 realmente separan
-# sonidos acusticamente distintos, o es solo matematica?"
+# Diseño: 3 figuras separadas, una por tipo de segmento.
+# Cada figura muestra los 7 subclusters en UNA sola fila horizontal,
+# lo que permite comparar los patrones espectrales de un vistazo.
 #
-# Metodo: para cada subcluster (0..6), carga 3 segmentos:
-#   - CENTROIDE: el mas cercano al centro del subcluster en el subespacio UMAP
-#   - ALEATORIO: uno al azar (para verificar consistencia interna)
-#   - EXTREMO:   el mas lejano del centro (periferia del subcluster)
-# Si los 3 segmentos de un subcluster suenan/se ven parecidos entre si,
-# y distintos entre subclusters → el subclustering es valido.
+#   F1 — CENTROIDES : el segmento más cercano al centro de cada subcluster
+#   F2 — ALEATORIOS : un segmento al azar (prueba de consistencia interna)
+#   F3 — EXTREMOS   : el segmento más lejano del centro (periferia)
+#
+# Lógica de validación:
+#   Si F1 ≈ F2 ≈ F3 dentro de cada subcluster → el subcluster es homogéneo
+#   Si F1 difiere entre subclusters            → el subclustering es válido
 # =============================================================================
 
 import os
@@ -21,17 +23,19 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.patches as mpatches
 import librosa
 import warnings
 warnings.filterwarnings('ignore')
 
 # ── Rutas ─────────────────────────────────────────────────────────────────────
-SEAGATE_BASE  = r'E:\Campaña diciembre 2024'
-SUB_CSV       = (r'C:\Users\User\Dropbox\Proyecto_Paisajes_Sonoros_Repositorio_Local'
-                 r'\resultados_HDD_Seagate\Campaña diciembre 2024\PA-17Tapyta'
-                 r'\PA-17Tapyta_v2_horario18a06_insectos6a12_cluster0_subclustering_5B.csv')
-OUT_DIR       = (r'C:\Users\User\Dropbox\Proyecto_Paisajes_Sonoros_Repositorio_Local'
-                 r'\Campaña_Diciembre_2024\05_Figuras_Congreso_SOLABIMA2026\FigF_Verificacion_Subclustering')
+SEAGATE_BASE = r'E:\Campaña diciembre 2024'
+SUB_CSV      = (r'C:\Users\User\Dropbox\Proyecto_Paisajes_Sonoros_Repositorio_Local'
+                r'\resultados_HDD_Seagate\Campaña diciembre 2024\PA-17Tapyta'
+                r'\PA-17Tapyta_v2_horario18a06_insectos6a12_cluster0_subclustering_5B.csv')
+OUT_DIR      = (r'C:\Users\User\Dropbox\Proyecto_Paisajes_Sonoros_Repositorio_Local'
+                r'\Campaña_Diciembre_2024\05_Figuras_Congreso_SOLABIMA2026'
+                r'\FigF_Verificacion_Subclustering')
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # ── Parámetros de audio ────────────────────────────────────────────────────────
@@ -41,29 +45,41 @@ HOP_LENGTH  = 256
 FMAX        = 8000
 SEGMENT_SEC = 4.0
 
-# Colores para los 7 subclusters (mismos que FigC)
-SUBCLUSTER_COLORS = {
-    0: '#1565c0',  # azul
-    1: '#2e7d32',  # verde
-    2: '#e65100',  # naranja
-    3: '#6a1b9a',  # violeta
-    4: '#c62828',  # rojo
-    5: '#00695c',  # teal
-    6: '#f9a825',  # amarillo oscuro
+# ── Colores por subcluster (mismos que FigC) ──────────────────────────────────
+SUB_COLORS = {
+    0: '#1565c0',   # azul
+    1: '#2e7d32',   # verde
+    2: '#e65100',   # naranja
+    3: '#6a1b9a',   # violeta
+    4: '#c62828',   # rojo
+    5: '#00695c',   # teal
+    6: '#f9a825',   # amarillo oscuro
+}
+
+# Fondo muy claro para cada subcluster (mismo tono que el color, muy diluido)
+SUB_BG = {
+    0: '#e3f0fc',
+    1: '#e8f5e9',
+    2: '#fff3e0',
+    3: '#f3e5f5',
+    4: '#ffebee',
+    5: '#e0f2f1',
+    6: '#fffde7',
 }
 
 np.random.seed(7)
 
 # ── Cargar CSV de subclustering ───────────────────────────────────────────────
-print("Cargando CSV de subclustering del Cluster 0...")
+print("Cargando CSV de subclustering...")
 df = pd.read_csv(SUB_CSV)
 valid_ids = sorted([s for s in df['subcluster_id'].unique() if s >= 0])
-print(f"  Subclusters validos: {valid_ids}")
-print(f"  Distribucion:\n{df['subcluster_id'].value_counts().sort_index()}")
+counts    = df['subcluster_id'].value_counts().sort_index()
+print(f"  Subclusters: {valid_ids}")
+print(f"  Distribución:\n{counts}")
 
-# ── Funcion: cargar audio ─────────────────────────────────────────────────────
+# ── Funciones utilitarias ─────────────────────────────────────────────────────
 def load_audio(archivo_origen, t_start):
-    parts = archivo_origen.replace('\\', '/').split('/')
+    parts    = archivo_origen.replace('\\', '/').split('/')
     wav_path = os.path.join(SEAGATE_BASE, parts[0], 'Data', parts[-1])
     if not os.path.exists(wav_path):
         return None
@@ -74,141 +90,179 @@ def load_audio(archivo_origen, t_start):
     except Exception:
         return None
 
-# ── Funcion: espectrograma en dB ──────────────────────────────────────────────
 def compute_spec(y):
-    D = librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH)
-    S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+    D     = librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH)
+    S_db  = librosa.amplitude_to_db(np.abs(D), ref=np.max)
     freqs = librosa.fft_frequencies(sr=SR_TARGET, n_fft=N_FFT)
     times = librosa.frames_to_time(np.arange(S_db.shape[1]),
                                    sr=SR_TARGET, hop_length=HOP_LENGTH)
-    mask = freqs <= FMAX
+    mask  = freqs <= FMAX
     return S_db[mask, :], freqs[mask], times
 
-# ── Seleccionar segmentos para cada subcluster ────────────────────────────────
-print("\nSeleccionando segmentos (centroide / aleatorio / extremo)...")
+def select_three(df_sub):
+    """Devuelve (row_centroide, row_aleatorio, row_extremo) en el sub-espacio."""
+    df = df_sub.copy()
+    cx = df['subU1'].mean()
+    cy = df['subU2'].mean()
+    df['dist'] = np.sqrt((df['subU1'] - cx)**2 + (df['subU2'] - cy)**2)
+    row_c = df.nsmallest(1, 'dist').iloc[0]
+    row_e = df.nlargest(1, 'dist').iloc[0]
+    pool  = df[(df.index != row_c.name) & (df.index != row_e.name)]
+    row_a = pool.sample(1).iloc[0] if len(pool) > 0 else row_c
+    return row_c, row_a, row_e
 
-subcluster_segments = {}   # {sid: {'centroide': row, 'aleatorio': row, 'extremo': row}}
+# ── Seleccionar segmentos y cargar espectrogramas ─────────────────────────────
+print("\nSeleccionando segmentos y cargando audio...")
 
-for sid in valid_ids:
-    sub = df[df['subcluster_id'] == sid].copy()
-    # Centroide en el subespacio 2D
-    cx = sub['subU1'].mean()
-    cy = sub['subU2'].mean()
-    sub['dist_centro'] = np.sqrt((sub['subU1'] - cx)**2 + (sub['subU2'] - cy)**2)
-
-    row_centroide = sub.nsmallest(1, 'dist_centro').iloc[0]
-    row_extremo   = sub.nlargest(1, 'dist_centro').iloc[0]
-    # Aleatorio: excluir centroide y extremo para que sea genuinamente al azar
-    mid_pool = sub[(sub.index != row_centroide.name) &
-                   (sub.index != row_extremo.name)]
-    row_aleatorio = mid_pool.sample(1).iloc[0] if len(mid_pool) > 0 else row_centroide
-
-    subcluster_segments[sid] = {
-        'centroide': row_centroide,
-        'aleatorio': row_aleatorio,
-        'extremo':   row_extremo,
-    }
-    print(f"  Subcluster {sid}: n={len(sub)}, "
-          f"dist_centro_max={sub['dist_centro'].max():.2f}")
-
-# ── Cargar audios y calcular espectrogramas ───────────────────────────────────
-print("\nCargando audios del Seagate...")
-spec_data = {}   # {sid: {tipo: (S_db, freqs, times) | None}}
-
-TIPOS = ['centroide', 'aleatorio', 'extremo']
+all_specs = {}   # {sid: {'centroide': spec|None, 'aleatorio': spec|None, 'extremo': spec|None}}
 
 for sid in valid_ids:
-    spec_data[sid] = {}
-    for tipo in TIPOS:
-        row = subcluster_segments[sid][tipo]
-        y   = load_audio(row['archivo_origen'], row['tiempo_inicio'])
+    sub       = df[df['subcluster_id'] == sid]
+    row_c, row_a, row_e = select_three(sub)
+    all_specs[sid] = {}
+    for tipo, row in [('centroide', row_c), ('aleatorio', row_a), ('extremo', row_e)]:
+        y = load_audio(row['archivo_origen'], row['tiempo_inicio'])
         if y is not None and len(y) > N_FFT:
-            S_db, freqs, times = compute_spec(y)
-            spec_data[sid][tipo] = (S_db, freqs, times)
+            all_specs[sid][tipo] = compute_spec(y)
         else:
-            spec_data[sid][tipo] = None
-            print(f"  ⚠ No se pudo cargar: subcluster {sid} / {tipo}")
+            all_specs[sid][tipo] = None
+            print(f"  ⚠ Sin audio: Sub-{sid} / {tipo}")
 
-# ── Construir figura ───────────────────────────────────────────────────────────
-print("\nGenerando figura de verificacion...")
+    n = len(sub)
+    d_max = sub.assign(
+        dist=lambda x: np.sqrt((x['subU1'] - sub['subU1'].mean())**2 +
+                               (x['subU2'] - sub['subU2'].mean())**2)
+    )['dist'].max()
+    print(f"  Sub-{sid}: n={n:>3}, dist_max={d_max:.2f} → OK")
 
-n_rows = len(valid_ids)   # 7 subclusters
-n_cols = 3                # centroide | aleatorio | extremo
+# ── Función generadora de figura ──────────────────────────────────────────────
+def build_figure(tipo, fig_id, titulo_principal, subtitulo, filename):
+    """
+    Genera una figura con 7 paneles en fila horizontal,
+    uno por subcluster, todos del mismo tipo de segmento.
+    """
+    n = len(valid_ids)   # 7
 
-fig_h = 2.2 * n_rows + 1.2
-fig = plt.figure(figsize=(14, fig_h))
-fig.patch.set_facecolor('white')
+    # Figura apaisada: ancha y poco alta
+    fig = plt.figure(figsize=(20, 4.8))
+    fig.patch.set_facecolor('white')
 
-gs = gridspec.GridSpec(n_rows, n_cols, figure=fig,
-                       hspace=0.55, wspace=0.25,
-                       top=0.94, bottom=0.04,
-                       left=0.08, right=0.97)
+    gs = gridspec.GridSpec(1, n, figure=fig,
+                           wspace=0.12,
+                           top=0.78, bottom=0.14,
+                           left=0.04, right=0.98)
 
-col_labels = ['Centroide\n(mas cerca del centro)', 'Aleatorio\n(muestra interna)',
-              'Extremo\n(periferia del subcluster)']
+    for col_i, sid in enumerate(valid_ids):
+        ax    = fig.add_subplot(gs[0, col_i])
+        spec  = all_specs[sid].get(tipo)
+        color = SUB_COLORS[sid]
+        n_seg = counts[sid]
 
-for col_i, lbl in enumerate(col_labels):
-    fig.text(0.08 + col_i * 0.30, 0.965, lbl,
-             ha='left', va='top', fontsize=9, fontweight='bold', color='#444444')
-
-for row_i, sid in enumerate(valid_ids):
-    color = SUBCLUSTER_COLORS.get(sid, '#555555')
-
-    for col_i, tipo in enumerate(TIPOS):
-        ax = fig.add_subplot(gs[row_i, col_i])
-        dat = spec_data[sid][tipo]
-
-        if dat is None:
-            ax.text(0.5, 0.5, 'No disponible', ha='center', va='center',
-                    transform=ax.transAxes, fontsize=8, color='gray')
-            ax.set_xticks([]); ax.set_yticks([])
-        else:
-            S_db, freqs, times = dat
+        if spec is not None:
+            S_db, freqs, times = spec
             ax.pcolormesh(times, freqs / 1000, S_db,
                           shading='auto', cmap='magma',
                           vmin=-60, vmax=0, rasterized=True)
-            ax.set_ylim(0, FMAX / 1000)
             ax.set_xlim(0, SEGMENT_SEC)
-            ax.tick_params(labelsize=7)
+            ax.set_ylim(0, FMAX / 1000)
+        else:
+            ax.set_facecolor('#f0f0f0')
+            ax.text(0.5, 0.5, 'N/D', ha='center', va='center',
+                    transform=ax.transAxes, fontsize=9, color='gray')
 
-            if col_i == 0:
-                ax.set_ylabel('kHz', fontsize=8, labelpad=2)
-            else:
-                ax.set_yticklabels([])
+        # ── Ejes ──────────────────────────────────────────────────────────────
+        ax.tick_params(labelsize=8)
+        ax.set_yticks([0, 2, 4, 6, 8])
 
-            if row_i == n_rows - 1:
-                ax.set_xlabel('Tiempo (s)', fontsize=8, labelpad=2)
-            else:
-                ax.set_xticklabels([])
+        if col_i == 0:
+            ax.set_yticklabels(['0', '2', '4', '6', '8'])
+            ax.set_ylabel('Frecuencia (kHz)', fontsize=9, labelpad=3)
+        else:
+            ax.set_yticklabels([])
 
-        # Borde de color del subcluster
+        ax.set_xlabel('Tiempo (s)', fontsize=8.5, labelpad=3)
+
+        # ── Borde grueso del color del subcluster ──────────────────────────────
         for spine in ax.spines.values():
-            spine.set_linewidth(2.0)
+            spine.set_linewidth(3.0)
             spine.set_color(color)
 
-        # Etiqueta de subcluster en la primera columna
-        if col_i == 0:
-            n_sub = len(df[df['subcluster_id'] == sid])
-            ax.set_title(f'Sub-{sid}  (n={n_sub})',
-                         fontsize=8.5, fontweight='bold',
-                         color=color, pad=3, loc='left')
+        # ── Título del panel ───────────────────────────────────────────────────
+        ax.set_title(
+            f'Sub-cluster {sid}',
+            fontsize=10, fontweight='bold', color=color, pad=4,
+            bbox=dict(boxstyle='round,pad=0.3',
+                      facecolor=SUB_BG[sid],
+                      edgecolor=color, alpha=0.90, linewidth=1.2)
+        )
 
-# ── Titulo general ─────────────────────────────────────────────────────────────
-fig.suptitle(
-    'Verificacion del subclustering — Cluster 0 de PA-17 (Pastizal)\n'
-    'Cada fila = 1 subcluster | Columnas: segmento central / aleatorio / extremo',
-    fontsize=11, y=0.995, color='#222222'
+        # ── n de segmentos debajo del espectrograma ────────────────────────────
+        ax.text(0.5, -0.22, f'n = {n_seg}',
+                transform=ax.transAxes, fontsize=8.5,
+                ha='center', color=color, fontweight='bold')
+
+        # ── Letra de panel ─────────────────────────────────────────────────────
+        letras = ['a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)']
+        ax.text(0.04, 0.94, letras[col_i],
+                transform=ax.transAxes, fontsize=9,
+                fontweight='bold', color='white', va='top',
+                bbox=dict(boxstyle='round,pad=0.15',
+                          facecolor=color, alpha=0.80, linewidth=0))
+
+    # ── Título general ─────────────────────────────────────────────────────────
+    fig.suptitle(
+        f'{fig_id} — {titulo_principal}\n'
+        f'Cluster 0 de PA-17 (Pastizal) → 7 subclusters | Tapytá, Paraguay',
+        fontsize=11, y=0.99, color='#222222', fontweight='bold'
+    )
+
+    # ── Nota al pie ────────────────────────────────────────────────────────────
+    fig.text(0.5, 0.03, subtitulo,
+             ha='center', fontsize=8.5, color='#555555', style='italic')
+
+    # ── Guardar ───────────────────────────────────────────────────────────────
+    out_path = os.path.join(OUT_DIR, filename)
+    fig.savefig(out_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print(f"  Guardada: {out_path}")
+
+
+# ── Generar las 3 figuras ─────────────────────────────────────────────────────
+print("\n--- Generando FigF1: CENTROIDES ---")
+build_figure(
+    tipo='centroide',
+    fig_id='FigF1',
+    titulo_principal='Centroides — el segmento más representativo de cada sub-cluster',
+    subtitulo=(
+        'Segmento con la mínima distancia al centro del sub-cluster en el espacio UMAP local. '
+        'Son los "ejemplares tipo" que definen cada sub-cluster.'
+    ),
+    filename='FigF1_Centroides_7subclusters.png'
 )
 
-# ── Texto explicativo ──────────────────────────────────────────────────────────
-fig.text(0.5, 0.013,
-         'Si los 3 espectrogramas de cada fila son similares entre si (y distintos entre filas), '
-         'el subclustering es acusticamente valido.',
-         ha='center', fontsize=8, color='#555555', style='italic')
+print("\n--- Generando FigF2: ALEATORIOS ---")
+build_figure(
+    tipo='aleatorio',
+    fig_id='FigF2',
+    titulo_principal='Aleatorios — verificación de consistencia interna',
+    subtitulo=(
+        'Segmento elegido al azar dentro de cada sub-cluster. '
+        'Si se parece al centroide (FigF1), el sub-cluster es internamente homogéneo.'
+    ),
+    filename='FigF2_Aleatorios_7subclusters.png'
+)
 
-# ── Guardar ────────────────────────────────────────────────────────────────────
-out_path = os.path.join(OUT_DIR, 'FigF_Verificacion_Subclustering_7subclusters.png')
-fig.savefig(out_path, dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print(f"\nFigura guardada: {out_path}")
-print("Script F completado.")
+print("\n--- Generando FigF3: EXTREMOS ---")
+build_figure(
+    tipo='extremo',
+    fig_id='FigF3',
+    titulo_principal='Extremos — el segmento más lejano del centro (periferia del sub-cluster)',
+    subtitulo=(
+        'Segmento con la máxima distancia al centro en el espacio UMAP local. '
+        'Cuanto más se parezca al centroide (FigF1), más compacto y homogéneo es el sub-cluster.'
+    ),
+    filename='FigF3_Extremos_7subclusters.png'
+)
+
+print("\nScript F completado. 3 figuras generadas en:")
+print(f"  {OUT_DIR}")
