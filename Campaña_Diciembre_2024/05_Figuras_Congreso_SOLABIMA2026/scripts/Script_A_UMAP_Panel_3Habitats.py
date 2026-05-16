@@ -163,8 +163,8 @@ fig.patch.set_facecolor('white')
 # Fila 1 (baja) = Leyenda de clusters
 gs = GridSpec(2, 3, figure=fig,
               height_ratios=[5.5, 1.0],
-              hspace=0.12, wspace=0.32,
-              top=0.90, bottom=0.04,
+              hspace=0.20, wspace=0.32,
+              top=0.90, bottom=0.06,
               left=0.05, right=0.98)
 
 for col_idx, (site_id, habitat, color, label) in enumerate(SITES):
@@ -214,7 +214,7 @@ for site_id, habitat, color, label in SITES:
 
     gs_i = GridSpec(2, 1, figure=fig_i,
                     height_ratios=[5.5, 1.0 if n_cl <= 10 else 1.8],
-                    hspace=0.08, top=0.88, bottom=0.04)
+                    hspace=0.22, top=0.88, bottom=0.06)
     ax_u = fig_i.add_subplot(gs_i[0])
     ax_l = fig_i.add_subplot(gs_i[1])
 

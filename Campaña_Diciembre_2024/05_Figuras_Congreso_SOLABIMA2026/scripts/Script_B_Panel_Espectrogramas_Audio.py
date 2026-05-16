@@ -177,9 +177,9 @@ fig.patch.set_facecolor('white')
 
 gs_main = gridspec.GridSpec(3, 2, figure=fig,
                              height_ratios=[1, 1, 0.07],
-                             hspace=0.45, wspace=0.28,
-                             top=0.90, bottom=0.05,
-                             left=0.07, right=0.96)
+                             hspace=0.55, wspace=0.35,
+                             top=0.88, bottom=0.06,
+                             left=0.08, right=0.94)
 
 panel_positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
 
@@ -231,14 +231,14 @@ for idx, (row_i, col_i) in enumerate(panel_positions):
 
     # ── Letra del panel ────────────────────────────────────────────────────────
     panel_letters = ['a)', 'b)', 'c)', 'd)']
-    ax.text(-0.06, 1.07, panel_letters[idx], transform=ax.transAxes,
+    ax.text(-0.12, 1.03, panel_letters[idx], transform=ax.transAxes,
             fontsize=12, fontweight='bold', color='#333333', va='top')
 
 # ── Título general ─────────────────────────────────────────────────────────────
 fig.suptitle(
     'Cuatro arquetipos acústicos identificados en el paisaje sonoro nocturno\n'
     'PA-17 (Pastizal) — Tapytá, Paraguay | Campaña Noviembre–Diciembre 2024',
-    fontsize=12, y=0.96, color='#222222'
+    fontsize=12, y=0.975, color='#222222'
 )
 
 fig.text(0.5, 0.022,
