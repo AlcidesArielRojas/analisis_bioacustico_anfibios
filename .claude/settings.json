@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(cp -r *)",
+      "Bash(mv *)",
+      "Bash(wmic logicaldisk *)",
+      "Bash(powershell *)",
+      "Bash(powershell.exe *)",
+      "Bash(ls /e/ *)",
+      "Bash(ls /e/*)",
+      "Bash(ls \"/e/*)",
+      "Bash(ffmpeg -version *)",
+      "Bash(ffmpeg -version)",
+      "Bash(chcp *)",
+      "Bash(PYTHONUTF8=1 /c/Users/User/miniconda3/envs/paisajes_matching/python *)",
+      "Bash(/c/Users/User/miniconda3/envs/paisajes_matching/python *)",
+      "Bash(/c/Users/User/miniconda3/python *)",
+      "WebSearch",
+      "WebFetch(domain:pmc.ncbi.nlm.nih.gov)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:www.ncbi.nlm.nih.gov)",
+      "WebFetch(domain:api.semanticscholar.org)",
+      "WebFetch(domain:www.mdpi.com)",
+      "WebFetch(domain:journals.plos.org)",
+      "WebFetch(domain:besjournals.onlinelibrary.wiley.com)",
+      "WebFetch(domain:peerj.com)"
+    ]
+  }
+}

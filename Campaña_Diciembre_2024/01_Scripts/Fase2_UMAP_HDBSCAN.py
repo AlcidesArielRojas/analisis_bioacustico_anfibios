@@ -1,0 +1,346 @@
+# ================================================================
+# Fase 2 por campaña / por grabadora
+# UMAP + HDBSCAN + métricas de clustering + Selection Table para Raven
+# ------------------------------------------------
+# ¿Qué hace este script?
+#   - Para cada sitio (grabadora) de la campaña:
+#       * Carga el archivo de features (MFCCs) generado en Fase 1.
+#       * Selecciona las columnas de MFCC (medias y desvíos).
+#       * Estandariza las features y aplica PCA automático para
+#         quedarse con el número mínimo de componentes que explican
+#         una fracción de la varianza (PCA_VARIANCE_THRESHOLD).
+#       * Proyecta los datos en un espacio de menor dimensión con UMAP.
+#       * Aplica HDBSCAN sobre el espacio UMAP para detectar clusters
+#         y marcar ruido (cluster = -1).
+#       * Calcula métricas de calidad del clustering
+#         (silhouette, Davies-Bouldin, Calinski-Harabasz).
+#       * Genera figuras:
+#             - UMAP 2D coloreado por cluster,
+#             - UMAP 2D ruido vs no ruido,
+#             - UMAP 3D interactivo (HTML).
+#       * Exporta un CSV con las coordenadas UMAP, los clusters,
+#         las features MFCC y metadatos básicos.
+#       * Genera una Selection Table para Raven con los segmentos
+#         que no son ruido, etiquetados por cluster.
+#   - Además, guarda un CSV de métricas por sitio con todos los
+#     parámetros usados (UMAP, PCA, HDBSCAN) y sus resultados.
+#
+# En resumen: toma los MFCCs de Fase 1, los reduce de dimensión,
+# agrupa segmentos en clusters acústicos y deja todo listo para
+# inspección visual (figuras) y auditoría en Raven.
+# ================================================================
+
+from pathlib import Path
+import pandas as pd
+import numpy as np
+
+import matplotlib
+matplotlib.use("Agg")  # backend no interactivo para evitar problemas de render
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.preprocessing import RobustScaler
+from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
+
+import umap
+import plotly.express as px
+from hdbscan import HDBSCAN
+import joblib  # NUEVO
+
+# Desactivar modo interactivo de figuras
+plt.ioff()
+
+# =========================
+# CAMPAÑA A PROCESAR
+# =========================
+NOMBRE_CAMPANIA = "Campaña diciembre 2024"
+
+BASE_DIR = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local")
+BASE_RESULTADOS = BASE_DIR / "resultados_HDD_Seagate" / NOMBRE_CAMPANIA
+BASE_RESULTADOS.mkdir(parents=True, exist_ok=True)
+
+# Carpeta para modelos directos de Fase 2 (NUEVO)
+RUTA_MODELOS = BASE_DIR / "modelos_fase2_fase4" / NOMBRE_CAMPANIA
+RUTA_MODELOS.mkdir(parents=True, exist_ok=True)
+
+SUFIJO_CORRIDA = "v2_horario18a06_insectos6a12"
+
+SEMILLA = 123
+
+UMAP_N_NEIGHBORS = 60
+UMAP_MIN_DIST = 0.3
+UMAP_N_COMPONENTS = 3
+UMAP_METRIC = "cosine"
+UMAP_DENSMAP = False
+
+# --- PCA: umbral de varianza explicada (automático) ---
+PCA_VARIANCE_THRESHOLD = 0.95  # 95% de varianza explicada
+
+MIN_CLUSTER_SIZE = 800
+MIN_SAMPLES = 65
+CLUSTER_SELECTION_EPS = 0.03
+CLUSTER_SELECTION_METHOD = "eom"
+
+sns.set_theme(context="talk", style="whitegrid", palette="tab20")
+plt.rcParams["figure.figsize"] = (12, 8)
+plt.rcParams["savefig.dpi"] = 200
+
+
+def correr_fase2_para_sitio(SITE: str):
+    print(f"\n==============================")
+    print(f"Fase 2 para grabadora: {SITE}")
+    print(f"Campaña: {NOMBRE_CAMPANIA}")
+    print(f"==============================")
+
+    ruta_salida_sitio = BASE_RESULTADOS / SITE
+    ruta_salida_sitio.mkdir(parents=True, exist_ok=True)
+
+    figuras_dir = ruta_salida_sitio / "figuras_fase2"
+    figuras_dir.mkdir(parents=True, exist_ok=True)
+
+    ruta_features = ruta_salida_sitio / f"features_{SITE}_{SUFIJO_CORRIDA}.parquet"
+    if not ruta_features.exists():
+        print(f"⚠️ No se encontró features para {SITE}: {ruta_features}")
+        return
+
+    df = pd.read_parquet(ruta_features)
+    FEATURES_BASE = [c for c in df.columns if c.startswith("mfcc_mean_")]
+    FEATURES_SD   = [c for c in df.columns if c.startswith("mfcc_sd_")]
+
+    features = FEATURES_BASE + FEATURES_SD
+    if not features:
+        print(f"⚠️ No se encontraron columnas MFCC en {ruta_features}")
+        return
+
+    df_muestra = df.copy()
+    X = df_muestra[features].dropna()
+
+    # Submuestreo para evitar MemoryError
+    MAX_SEGMENTOS = 100_000  # ajustable según tu RAM
+    if len(X) > MAX_SEGMENTOS:
+        print(f"⚠️ Demasiados segmentos ({len(X)}), se submuestrean a {MAX_SEGMENTOS}")
+        X = X.sample(n=MAX_SEGMENTOS, random_state=42)
+        idx = X.index
+        df_muestra = df_muestra.loc[idx].copy()
+    else:
+        idx = X.index
+
+    # ---------------- PCA AUTOMÁTICO POR VARIANZA EXPLICADA ----------------
+    scaler = RobustScaler()
+    X_std = scaler.fit_transform(X)
+
+    # 1) PCA completo para ver el espectro de varianza
+    pca_full = PCA(n_components=None, random_state=SEMILLA)
+    pca_full.fit(X_std)
+
+    var_ratio = pca_full.explained_variance_ratio_
+    cumvar = np.cumsum(var_ratio)
+
+    # Número mínimo de componentes que alcanzan el umbral
+    n_comp_sel = int(np.searchsorted(cumvar, PCA_VARIANCE_THRESHOLD) + 1)
+    varianza_total_sel = float(cumvar[n_comp_sel - 1])
+
+    print(f"PCA: seleccionados {n_comp_sel} componentes (varianza explicada = {varianza_total_sel:.3f})")
+
+    # 2) Gráfico de varianza explicada acumulada
+    fig_pca, ax_pca = plt.subplots(figsize=(10, 6))
+    componentes = np.arange(1, len(cumvar) + 1)
+
+    ax_pca.plot(componentes, cumvar, marker="o", linestyle="-", color="tab:blue", label="Varianza acumulada")
+    ax_pca.axhline(PCA_VARIANCE_THRESHOLD, color="tab:red", linestyle="--",
+                   label=f"Umbral {PCA_VARIANCE_THRESHOLD:.2f}")
+    ax_pca.axvline(n_comp_sel, color="tab:green", linestyle="--",
+                   label=f"Componentes seleccionados: {n_comp_sel}")
+
+    ax_pca.set_xlabel("Número de componentes PCA")
+    ax_pca.set_ylabel("Varianza explicada acumulada")
+    ax_pca.set_title(f"{SITE} | PCA varianza explicada (MFCCs)")
+    ax_pca.set_ylim(0, 1.01)
+    ax_pca.grid(True, alpha=0.3)
+    ax_pca.legend(loc="lower right")
+
+    ruta_fig_pca = ruta_salida_sitio / f"{SITE}_{SUFIJO_CORRIDA}_pca_varianza_explicada.png"
+    fig_pca.tight_layout()
+    fig_pca.savefig(ruta_fig_pca)
+    fig_pca.savefig(figuras_dir / f"{SITE}_{SUFIJO_CORRIDA}_pca_varianza_explicada.png")
+    plt.close(fig_pca)
+
+    # 3) PCA definitivo con n_comp_sel y whitening
+    pca = PCA(n_components=n_comp_sel, whiten=True, random_state=SEMILLA)
+    X_whiten = pca.fit_transform(X_std)
+    # -----------------------------------------------------------------------
+
+    umap_model = umap.UMAP(
+        n_neighbors=UMAP_N_NEIGHBORS,
+        min_dist=UMAP_MIN_DIST,
+        n_components=UMAP_N_COMPONENTS,
+        metric=UMAP_METRIC,
+        densmap=UMAP_DENSMAP,
+        random_state=None,
+        n_jobs=-1
+    )
+
+    X_umap = umap_model.fit_transform(X_whiten)
+
+    # === GUARDAR MODELO DIRECTO DE FASE 2 (NUEVO) ===
+    modelo = {
+        "sitio": SITE,
+        "campania": NOMBRE_CAMPANIA,
+        "sufijo_corrida": SUFIJO_CORRIDA,
+        "features": features,
+        "scaler": scaler,
+        "pca": pca,
+        "umap_model": umap_model,
+        "pca_n_components": n_comp_sel,
+        "pca_variance_explained": varianza_total_sel,
+        "umap_params": {
+            "n_neighbors": UMAP_N_NEIGHBORS,
+            "min_dist": UMAP_MIN_DIST,
+            "n_components": UMAP_N_COMPONENTS,
+            "metric": UMAP_METRIC,
+            "densmap": UMAP_DENSMAP,
+        }
+    }
+    ruta_modelo = RUTA_MODELOS / f"modelos_directos_{SITE}_{SUFIJO_CORRIDA}.pkl"
+    joblib.dump(modelo, ruta_modelo)
+    print(f"💾 Modelo Fase 2 guardado en: {ruta_modelo}")
+    # ================================================
+
+    df_umap = df_muestra.loc[idx].copy()
+    df_umap["DIM1"] = X_umap[:, 0]
+    df_umap["DIM2"] = X_umap[:, 1]
+    df_umap["U1"] = X_umap[:, 0]
+    df_umap["U2"] = X_umap[:, 1]
+    df_umap["U3"] = X_umap[:, 2] if UMAP_N_COMPONENTS >= 3 else 0
+
+    hdb = HDBSCAN(
+        min_cluster_size=MIN_CLUSTER_SIZE,
+        min_samples=MIN_SAMPLES,
+        cluster_selection_epsilon=CLUSTER_SELECTION_EPS,
+        cluster_selection_method=CLUSTER_SELECTION_METHOD,
+        prediction_data=True
+    )
+    labels_hdb = hdb.fit_predict(X_umap)
+
+    df_umap["cluster_hdbscan"] = labels_hdb
+    df_umap["es_ruido"] = (labels_hdb == -1).astype(int)
+
+    mask_clusters = labels_hdb != -1
+    n_clusters = len(set(labels_hdb[mask_clusters]))
+    sil_hdb = silhouette_score(X_umap[mask_clusters], labels_hdb[mask_clusters]) if n_clusters > 1 else np.nan
+    dbi_hdb = davies_bouldin_score(X_umap[mask_clusters], labels_hdb[mask_clusters]) if n_clusters > 1 else np.nan
+    ch_hdb = calinski_harabasz_score(X_umap[mask_clusters], labels_hdb[mask_clusters]) if n_clusters > 1 else np.nan
+    proporcion_ruido = 1.0 - (mask_clusters.sum() / len(labels_hdb))
+
+    fig, ax = plt.subplots(figsize=(16, 12))
+    plt.subplots_adjust(top=0.88, bottom=0.12)
+    sns.scatterplot(
+        data=df_umap, x="DIM1", y="DIM2",
+        hue="cluster_hdbscan", palette="tab20", s=18, linewidth=0, alpha=0.85, ax=ax
+    )
+    ax.set_title(f"{SITE} | UMAP + HDBSCAN (ruido=-1) | clusters={n_clusters} | ruido={proporcion_ruido:.2f}")
+    ax.legend(title="Cluster", bbox_to_anchor=(1.02, 1), loc="upper left", frameon=False)
+    plt.tight_layout()
+    plt.savefig(ruta_salida_sitio / f"{SITE}_{SUFIJO_CORRIDA}_umap_hdbscan_scatter2d.png")
+    plt.savefig(figuras_dir / f"{SITE}_{SUFIJO_CORRIDA}_umap_hdbscan_scatter2d.png")
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(16, 12))
+    plt.subplots_adjust(top=0.88, bottom=0.12)
+    sns.scatterplot(
+        data=df_umap, x="DIM1", y="DIM2",
+        hue="es_ruido", palette={0: "tab:blue", 1: "tab:red"}, s=18, linewidth=0, alpha=0.85, ax=ax
+    )
+    ax.set_title(f"{SITE} | UMAP puntos válidos (azul) vs ruido (rojo)")
+    ax.legend(title="Ruido", labels=["No ruido (0)", "Ruido (1)"])
+    plt.tight_layout()
+    plt.savefig(ruta_salida_sitio / f"{SITE}_{SUFIJO_CORRIDA}_umap_ruido_vs_valido.png")
+    plt.savefig(figuras_dir / f"{SITE}_{SUFIJO_CORRIDA}_umap_ruido_vs_valido.png")
+    plt.close(fig)
+
+    hover_cols = [c for c in ["sitio", "archivo_origen", "tiempo_inicio", "tiempo_fin"] if c in df_umap.columns]
+    fig_umap3d = px.scatter_3d(
+        df_umap, x="U1", y="U2", z="U3",
+        color="cluster_hdbscan",
+        hover_data=hover_cols + [c for c in ["mfcc_mean_1", "mfcc_sd_1"] if c in df_umap.columns],
+        title=f"{SITE} UMAP 3D + HDBSCAN | clusters={n_clusters} | ruido={proporcion_ruido:.2f}"
+    )
+    fig_umap3d.update_traces(marker=dict(size=3, opacity=0.85))
+    fig_umap3d.write_html(str(ruta_salida_sitio / f"{SITE}_{SUFIJO_CORRIDA}_umap3d_hdbscan.html"))
+    fig_umap3d.write_html(str(figuras_dir / f"{SITE}_{SUFIJO_CORRIDA}_umap3d_hdbscan.html"))
+
+    cols_export = ["DIM1", "DIM2", "U1", "U2", "U3", "cluster_hdbscan", "es_ruido"] + \
+                  [c for c in FEATURES_BASE + FEATURES_SD if c in df_umap.columns] + \
+                  hover_cols
+    df_umap[cols_export].to_csv(ruta_salida_sitio / f"{SITE}_{SUFIJO_CORRIDA}_fase2_umap_hdbscan.csv", index=False)
+
+    df_metrics = pd.DataFrame([{
+        "site": SITE,
+        "campania": NOMBRE_CAMPANIA,
+        "n_clusters": n_clusters,
+        "proporcion_ruido": proporcion_ruido,
+        "silhouette": sil_hdb,
+        "davies_bouldin": dbi_hdb,
+        "calinski_harabasz": ch_hdb,
+        "umap_n_neighbors": UMAP_N_NEIGHBORS,
+        "umap_min_dist": UMAP_MIN_DIST,
+        "umap_metric": UMAP_METRIC,
+        "umap_densmap": UMAP_DENSMAP,
+        "pca_components": n_comp_sel,
+        "pca_variance_threshold": PCA_VARIANCE_THRESHOLD,
+        "pca_variance_explained": varianza_total_sel,
+        "pca_whiten": True,
+        "min_cluster_size": MIN_CLUSTER_SIZE,
+        "min_samples": MIN_SAMPLES,
+        "cluster_selection_epsilon": CLUSTER_SELECTION_EPS,
+        "cluster_selection_method": CLUSTER_SELECTION_METHOD
+    }])
+    df_metrics.to_csv(ruta_salida_sitio / f"{SITE}_{SUFIJO_CORRIDA}_fase2_umap_hdbscan_metrics.csv", index=False)
+
+    # Selection Table para Raven
+    if all(col in df_umap.columns for col in ["archivo_origen", "tiempo_inicio", "tiempo_fin", "cluster_hdbscan"]):
+        df_raven = df_umap[df_umap["cluster_hdbscan"] != -1].copy()
+        df_raven = df_raven.reset_index(drop=True)
+        df_raven["Selection"] = df_raven.index + 1
+        df_raven["View"] = 1
+        df_raven["Channel"] = 1
+        df_raven["Begin Time (s)"] = df_raven["tiempo_inicio"]
+        df_raven["End Time (s)"] = df_raven["tiempo_fin"]
+        df_raven["Low Freq (Hz)"] = 0.0
+        df_raven["High Freq (Hz)"] = 8000.0
+        df_raven["Annotation"] = df_raven["cluster_hdbscan"].apply(lambda c: f"cluster_{c}")
+
+        cols_raven = [
+            "Selection", "View", "Channel",
+            "Begin Time (s)", "End Time (s)",
+            "Low Freq (Hz)", "High Freq (Hz)",
+            "Annotation", "archivo_origen", "sitio"
+        ]
+        cols_raven = [c for c in cols_raven if c in df_raven.columns]
+
+        ruta_raven = ruta_salida_sitio / f"{SITE}_{SUFIJO_CORRIDA}_fase2_raven_selection_table.txt"
+        df_raven[cols_raven].to_csv(ruta_raven, sep="\t", index=False)
+        print(f"📄 Selection Table para Raven guardada en: {ruta_raven}")
+    else:
+        print("⚠️ No se pudo generar Selection Table para Raven (faltan columnas).")
+
+    print("✅ Fase 2 completada.")
+    print(f"- Clusters detectados (sin ruido): {n_clusters}")
+    print(f"- Proporción de ruido: {proporcion_ruido:.2f}")
+    print(f"- Silhouette (sin ruido): {sil_hdb if not np.isnan(sil_hdb) else 'N/A'}")
+    print(f"- Davies-Bouldin (menor es mejor): {dbi_hdb if not np.isnan(dbi_hdb) else 'N/A'}")
+    print(f"- Calinski-Harabasz (mayor es mejor): {ch_hdb if not np.isnan(ch_hdb) else 'N/A'}")
+    print(f"- PCA: {n_comp_sel} componentes, varianza explicada = {varianza_total_sel:.3f}")
+
+
+if __name__ == "__main__":
+    grabadoras = [p.name for p in BASE_RESULTADOS.iterdir() if p.is_dir()]
+    grabadoras = sorted(grabadoras)
+
+    print("\nGrabadoras detectadas para Fase 2:")
+    for g in grabadoras:
+        print(" -", g)
+
+    for sitio in grabadoras:
+        correr_fase2_para_sitio(sitio)
