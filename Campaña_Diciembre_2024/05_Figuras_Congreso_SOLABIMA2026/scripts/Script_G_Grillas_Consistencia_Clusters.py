@@ -25,6 +25,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.patches as mpatches
+import matplotlib.ticker
 import librosa
 import warnings
 warnings.filterwarnings('ignore')
@@ -125,7 +126,8 @@ def compute_spec(y):
     freqs = librosa.fft_frequencies(sr=SR_TARGET, n_fft=N_FFT)
     times = librosa.frames_to_time(np.arange(S_db.shape[1]),
                                    sr=SR_TARGET, hop_length=HOP_LENGTH)
-    mask = freqs <= FMAX
+    # Excluir DC (0 Hz) y aplicar FMAX; devuelve frecuencias en Hz
+    mask = (freqs > 0) & (freqs <= FMAX)
     return S_db[mask, :], freqs[mask], times
 
 def select_three(df_cl):
@@ -204,43 +206,42 @@ def build_figure(tipo, tipo_titulo, tipo_subtitulo, tipo_color_borde, filename):
 
         if spec is not None:
             S_db, freqs, times = spec
-            ax.pcolormesh(times, freqs / 1000, S_db,
+            ax.pcolormesh(times, freqs, S_db,
                           shading='auto', cmap='magma',
                           vmin=-60, vmax=0, rasterized=True)
             ax.set_xlim(0, SEGMENT_SEC)
-            ax.set_ylim(0, FMAX / 1000)
         else:
             ax.set_facecolor('#f5f5f5')
             ax.text(0.5, 0.5, 'No disponible',
                     ha='center', va='center',
                     transform=ax.transAxes, fontsize=9, color='gray')
 
-        # ── Ejes ──────────────────────────────────────────────────────────────
-        ax.tick_params(labelsize=8)
-        ax.set_yticks([0, 2, 4, 6, 8])
-        ax.set_yticklabels(['0', '2', '4', '6', '8'])
-        ax.set_ylabel('kHz', fontsize=8.5, labelpad=3)
+        # ── Eje Y logarítmico en Hz (como el espectrograma de referencia) ──────
+        ax.set_yscale('log')
+        ax.set_ylim(30, FMAX)
+        ax.tick_params(labelsize=7.5)
+        ax.set_yticks([100, 500, 1000, 2000, 4000, 8000])
+        ax.set_yticklabels(['100', '500', '1k', '2k', '4k', '8k'])
+        ax.yaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+        ax.set_ylabel('Hz', fontsize=8.5, labelpad=3)
 
         if idx == n_clusters - 1:
             ax.set_xlabel('Tiempo (s)', fontsize=9, labelpad=3)
         else:
             ax.set_xticklabels([])
 
-        # ── Borde del panel (color del cluster) ───────────────────────────────
+        # ── Borde fino del panel (color del cluster) ──────────────────────────
         for spine in ax.spines.values():
-            spine.set_linewidth(2.5)
+            spine.set_linewidth(1.8)
             spine.set_color(color)
 
-        # ── Título del panel: letra + etiqueta + n + hábitat ──────────────────
+        # ── Título limpio: letra + etiqueta + n ───────────────────────────────
         lbl   = cd['lbl_short'].replace('\n', ' · ')
         n_str = f'n = {cd["n_seg"]:,}'
         ax.set_title(
             f'{panel_letters[idx]}  {lbl}  ·  {n_str}',
             fontsize=9.5, fontweight='bold', color=color,
-            pad=4, loc='left',
-            bbox=dict(boxstyle='round,pad=0.3',
-                      facecolor=HABITAT_BG[hab],
-                      edgecolor=color, alpha=0.85, linewidth=1.0))
+            pad=4, loc='left')
 
     # ── Leyenda de hábitats ────────────────────────────────────────────────────
     handles_hab = [
