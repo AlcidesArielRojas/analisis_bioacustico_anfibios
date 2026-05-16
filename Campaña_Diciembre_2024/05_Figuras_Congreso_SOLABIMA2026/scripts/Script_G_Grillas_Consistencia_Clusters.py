@@ -183,23 +183,21 @@ def build_figure(tipo, tipo_titulo, tipo_subtitulo, tipo_color_borde, filename):
     tipo_color_borde: color del marco de cada panel para ese tipo
     filename       : nombre de archivo de salida (sin ruta)
     """
-    n_clusters = len(all_data)
-    n_cols     = 4
-    n_rows     = int(np.ceil(n_clusters / n_cols))   # 2 filas × 4 columnas = 8
+    n_clusters = len(all_data)   # 8
 
-    fig = plt.figure(figsize=(18, 5.5 * n_rows + 1.5))
+    # Figura vertical: un cluster por fila, columna única
+    fig = plt.figure(figsize=(11, n_clusters * 2.6))
     fig.patch.set_facecolor('white')
 
-    gs = gridspec.GridSpec(n_rows, n_cols, figure=fig,
-                           hspace=0.55, wspace=0.20,
-                           top=0.88, bottom=0.08,
-                           left=0.04, right=0.98)
+    gs = gridspec.GridSpec(n_clusters, 1, figure=fig,
+                           hspace=0.55,
+                           top=0.96, bottom=0.04,
+                           left=0.09, right=0.97)
+
+    panel_letters = ['a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)', 'h)']
 
     for idx, cd in enumerate(all_data):
-        row_i = idx // n_cols
-        col_i = idx % n_cols
-        ax    = fig.add_subplot(gs[row_i, col_i])
-
+        ax    = fig.add_subplot(gs[idx, 0])
         spec  = cd['specs'].get(tipo)
         color = cd['color']
         hab   = cd['habitat']
@@ -217,43 +215,32 @@ def build_figure(tipo, tipo_titulo, tipo_subtitulo, tipo_color_borde, filename):
                     ha='center', va='center',
                     transform=ax.transAxes, fontsize=9, color='gray')
 
-        # Ejes
+        # ── Ejes ──────────────────────────────────────────────────────────────
         ax.tick_params(labelsize=8)
         ax.set_yticks([0, 2, 4, 6, 8])
-        if col_i == 0:
-            ax.set_yticklabels(['0', '2', '4', '6', '8'])
-            ax.set_ylabel('Frecuencia (kHz)', fontsize=8.5, labelpad=3)
-        else:
-            ax.set_yticklabels([])
+        ax.set_yticklabels(['0', '2', '4', '6', '8'])
+        ax.set_ylabel('kHz', fontsize=8.5, labelpad=3)
 
-        if row_i == n_rows - 1:
-            ax.set_xlabel('Tiempo (s)', fontsize=8.5, labelpad=3)
+        if idx == n_clusters - 1:
+            ax.set_xlabel('Tiempo (s)', fontsize=9, labelpad=3)
         else:
             ax.set_xticklabels([])
 
-        # Borde del panel (color del cluster)
+        # ── Borde del panel (color del cluster) ───────────────────────────────
         for spine in ax.spines.values():
             spine.set_linewidth(2.5)
             spine.set_color(color)
 
-        # Título del panel con fondo de hábitat
-        titulo_panel = cd['lbl_long']
-        n_str        = f'n = {cd["n_seg"]:,}'
-        ax.set_title(titulo_panel + f'\n{n_str}',
-                     fontsize=8, fontweight='bold', color=color,
-                     pad=5, loc='center',
-                     bbox=dict(boxstyle='round,pad=0.3',
-                               facecolor=HABITAT_BG[hab],
-                               edgecolor=color, alpha=0.85, linewidth=1.0))
-
-        # Número de panel (esquina superior izquierda)
-        panel_letter = ['a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)', 'h)'][idx]
-        ax.text(0.03, 0.97, panel_letter,
-                transform=ax.transAxes, fontsize=10,
-                fontweight='bold', color='white',
-                va='top', ha='left',
-                bbox=dict(boxstyle='round,pad=0.15',
-                          facecolor=color, alpha=0.75, linewidth=0))
+        # ── Título del panel: letra + etiqueta + n + hábitat ──────────────────
+        lbl   = cd['lbl_short'].replace('\n', ' · ')
+        n_str = f'n = {cd["n_seg"]:,}'
+        ax.set_title(
+            f'{panel_letters[idx]}  {lbl}  ·  {n_str}',
+            fontsize=9.5, fontweight='bold', color=color,
+            pad=4, loc='left',
+            bbox=dict(boxstyle='round,pad=0.3',
+                      facecolor=HABITAT_BG[hab],
+                      edgecolor=color, alpha=0.85, linewidth=1.0))
 
     # ── Leyenda de hábitats ────────────────────────────────────────────────────
     handles_hab = [
@@ -263,18 +250,18 @@ def build_figure(tipo, tipo_titulo, tipo_subtitulo, tipo_color_borde, filename):
     ]
     fig.legend(handles=handles_hab, loc='lower center', ncol=3,
                fontsize=10, frameon=True, framealpha=0.92,
-               edgecolor='#cccccc', bbox_to_anchor=(0.5, 0.01),
+               edgecolor='#cccccc', bbox_to_anchor=(0.5, 0.005),
                title='Tipo de hábitat', title_fontsize=9)
 
     # ── Título general ────────────────────────────────────────────────────────
     fig.suptitle(
         f'{tipo_titulo}\n'
         f'PA-17 (Pastizal) · EU-16 (Eucaliptal) · BO-31 (Bosque) | Tapytá, Paraguay',
-        fontsize=12, y=0.97, color='#222222', fontweight='bold'
+        fontsize=12, y=0.99, color='#222222', fontweight='bold'
     )
 
-    # Nota al pie
-    fig.text(0.5, 0.048,
+    # ── Nota al pie ───────────────────────────────────────────────────────────
+    fig.text(0.5, 0.018,
              tipo_subtitulo,
              ha='center', fontsize=8.5, color='#555555', style='italic')
 

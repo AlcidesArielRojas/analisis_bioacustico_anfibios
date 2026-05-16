@@ -138,22 +138,24 @@ for sid in valid_ids:
 # ── Función generadora de figura ──────────────────────────────────────────────
 def build_figure(tipo, fig_id, titulo_principal, subtitulo, filename):
     """
-    Genera una figura con 7 paneles en fila horizontal,
-    uno por subcluster, todos del mismo tipo de segmento.
+    Genera una figura con 7 paneles apilados verticalmente,
+    uno por subcluster (fila), todos del mismo tipo de segmento.
     """
     n = len(valid_ids)   # 7
 
-    # Figura apaisada: ancha y poco alta
-    fig = plt.figure(figsize=(20, 4.8))
+    # Figura vertical: un subcluster por fila
+    fig = plt.figure(figsize=(11, n * 2.6))
     fig.patch.set_facecolor('white')
 
-    gs = gridspec.GridSpec(1, n, figure=fig,
-                           wspace=0.12,
-                           top=0.78, bottom=0.14,
-                           left=0.04, right=0.98)
+    gs = gridspec.GridSpec(n, 1, figure=fig,
+                           hspace=0.55,
+                           top=0.96, bottom=0.04,
+                           left=0.09, right=0.97)
 
-    for col_i, sid in enumerate(valid_ids):
-        ax    = fig.add_subplot(gs[0, col_i])
+    letras = ['a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)']
+
+    for row_i, sid in enumerate(valid_ids):
+        ax    = fig.add_subplot(gs[row_i, 0])
         spec  = all_specs[sid].get(tipo)
         color = SUB_COLORS[sid]
         n_seg = counts[sid]
@@ -173,41 +175,28 @@ def build_figure(tipo, fig_id, titulo_principal, subtitulo, filename):
         # ── Ejes ──────────────────────────────────────────────────────────────
         ax.tick_params(labelsize=8)
         ax.set_yticks([0, 2, 4, 6, 8])
+        ax.set_yticklabels(['0', '2', '4', '6', '8'])
+        ax.set_ylabel('kHz', fontsize=8.5, labelpad=3)
 
-        if col_i == 0:
-            ax.set_yticklabels(['0', '2', '4', '6', '8'])
-            ax.set_ylabel('Frecuencia (kHz)', fontsize=9, labelpad=3)
+        if row_i == n - 1:
+            ax.set_xlabel('Tiempo (s)', fontsize=9, labelpad=3)
         else:
-            ax.set_yticklabels([])
-
-        ax.set_xlabel('Tiempo (s)', fontsize=8.5, labelpad=3)
+            ax.set_xticklabels([])
 
         # ── Borde grueso del color del subcluster ──────────────────────────────
         for spine in ax.spines.values():
             spine.set_linewidth(3.0)
             spine.set_color(color)
 
-        # ── Título del panel ───────────────────────────────────────────────────
+        # ── Título del panel: letra + subcluster + n ───────────────────────────
         ax.set_title(
-            f'Sub-cluster {sid}',
-            fontsize=10, fontweight='bold', color=color, pad=4,
+            f'{letras[row_i]}  Sub-cluster {sid}  ·  n = {n_seg}',
+            fontsize=10, fontweight='bold', color=color,
+            pad=4, loc='left',
             bbox=dict(boxstyle='round,pad=0.3',
                       facecolor=SUB_BG[sid],
                       edgecolor=color, alpha=0.90, linewidth=1.2)
         )
-
-        # ── n de segmentos debajo del espectrograma ────────────────────────────
-        ax.text(0.5, -0.22, f'n = {n_seg}',
-                transform=ax.transAxes, fontsize=8.5,
-                ha='center', color=color, fontweight='bold')
-
-        # ── Letra de panel ─────────────────────────────────────────────────────
-        letras = ['a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)']
-        ax.text(0.04, 0.94, letras[col_i],
-                transform=ax.transAxes, fontsize=9,
-                fontweight='bold', color='white', va='top',
-                bbox=dict(boxstyle='round,pad=0.15',
-                          facecolor=color, alpha=0.80, linewidth=0))
 
     # ── Título general ─────────────────────────────────────────────────────────
     fig.suptitle(
@@ -217,7 +206,7 @@ def build_figure(tipo, fig_id, titulo_principal, subtitulo, filename):
     )
 
     # ── Nota al pie ────────────────────────────────────────────────────────────
-    fig.text(0.5, 0.03, subtitulo,
+    fig.text(0.5, 0.01, subtitulo,
              ha='center', fontsize=8.5, color='#555555', style='italic')
 
     # ── Guardar ───────────────────────────────────────────────────────────────
