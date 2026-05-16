@@ -1,17 +1,20 @@
 # =============================================================================
 # Script_G_Grillas_Consistencia_Clusters.py
 # Campaña Nov-Dic 2024 — Paisajes Sonoros Tapytá
-# Figura G: Grillas de consistencia para clusters seleccionados
+# Figuras G1/G2/G3: Consistencia de clusters acústicos por tipo de segmento
 #
-# Para cada cluster "importante" muestra 5 espectrogramas:
-#   col 1 → CENTROIDE (mas cercano al centroide UMAP)
-#   col 2-4 → ALEATORIOS (3 segmentos al azar del cluster)
-#   col 5 → EXTREMO (mas lejano del centroide = periferia del cluster)
+# Se generan 3 figuras separadas, cada una con 8 clusters (2×4 grid):
+#   G1 — CENTROIDES:  el segmento más cercano al centroide de cada cluster
+#   G2 — ALEATORIOS:  un segmento al azar (para verificar consistencia interna)
+#   G3 — EXTREMOS:    el segmento más lejano del centroide (periferia del cluster)
 #
-# Criterio de seleccion de clusters importantes:
-#   - PA-17Tapyta: los 4 arquetipos (2=anfibio, 17=insectos, 11=lluvia, 0=mixto)
-#   - EU-16Tapyta: ambos clusters (solo hay 2, muy distintos entre si)
-#   - BO-31Tapyta: cluster 1 (mas grande, n=3851) y cluster 2 (mas puro, sim=0.831)
+# Ventaja: permite comparar directamente todos los clusters para un mismo
+# tipo de segmento, en lugar de ver todo mezclado en un solo gráfico grande.
+#
+# Criterio de selección de clusters "importantes":
+#   PA-17 (Pastizal) : clusters 2, 17, 11, 0 — los 4 arquetipos acústicos
+#   EU-16 (Eucaliptal): clusters 0 y 1 — solo hay 2, muy contrastantes
+#   BO-31 (Bosque)   : clusters 1 (el más grande) y 2 (el más compacto)
 # =============================================================================
 
 import os
@@ -21,32 +24,66 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.patches as mpatches
 import librosa
 import warnings
 warnings.filterwarnings('ignore')
 
 # ── Rutas ─────────────────────────────────────────────────────────────────────
-BASE_RESULTS  = r'C:\Users\User\Dropbox\Proyecto_Paisajes_Sonoros_Repositorio_Local\Campaña_Diciembre_2024\02_Resultados_por_sitio'
-SEAGATE_BASE  = r'E:\Campaña diciembre 2024'
-OUT_DIR       = (r'C:\Users\User\Dropbox\Proyecto_Paisajes_Sonoros_Repositorio_Local'
-                 r'\Campaña_Diciembre_2024\05_Figuras_Congreso_SOLABIMA2026\FigG_Consistencia_Clusters')
+BASE_RESULTS = r'C:\Users\User\Dropbox\Proyecto_Paisajes_Sonoros_Repositorio_Local\Campaña_Diciembre_2024\02_Resultados_por_sitio'
+SEAGATE_BASE = r'E:\Campaña diciembre 2024'
+OUT_DIR      = (r'C:\Users\User\Dropbox\Proyecto_Paisajes_Sonoros_Repositorio_Local'
+                r'\Campaña_Diciembre_2024\05_Figuras_Congreso_SOLABIMA2026\FigG_Consistencia_Clusters')
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# ── Clusters a analizar ───────────────────────────────────────────────────────
-# Formato: (site_id, cluster_id, etiqueta_descriptiva, color_habitat)
-SELECTED_CLUSTERS = [
-    # PA-17 — 4 arquetipos
-    ('PA-17Tapyta', 2,  'PA-17 | Cl.2 — Vocaliz. anfibio\n(llamados tonales 1-2 kHz)',  '#1565c0'),
-    ('PA-17Tapyta', 17, 'PA-17 | Cl.17 — Coro de insectos\n(estridulacion broadband)',  '#2e7d32'),
-    ('PA-17Tapyta', 11, 'PA-17 | Cl.11 — Ruido abiotico\n(lluvia — energia difusa)',    '#37474f'),
-    ('PA-17Tapyta', 0,  'PA-17 | Cl.0 — Sonido mixto\n(candidato a subclustering)',     '#6a1b9a'),
-    # EU-16 — solo 2 clusters, muy contraste entre si
-    ('EU-16Tapyta', 0,  'EU-16 | Cl.0 — Eucaliptal tipo A\n(n=4582, Sil alta)',         '#6a1b9a'),
-    ('EU-16Tapyta', 1,  'EU-16 | Cl.1 — Eucaliptal tipo B\n(n=95418, cluster masivo)',  '#9c4dcc'),
-    # BO-31 — bosque representativo
-    ('BO-31Tapyta', 1,  'BO-31 | Cl.1 — Bosque dominante\n(n=3851, sonido principal)',  '#2e7d32'),
-    ('BO-31Tapyta', 2,  'BO-31 | Cl.2 — Bosque secundario\n(n=811, muy compacto)',      '#43a047'),
+# ── Clusters seleccionados ────────────────────────────────────────────────────
+# Cada entrada: (sitio, cluster_id, etiqueta corta, etiqueta larga, color borde, icono habitat)
+SELECTED = [
+    ('PA-17Tapyta', 2,
+     'Vocaliz. anfibio\nPA-17 · Cl. 2',
+     'PA-17 · Cl. 2\nVocalización de anfibio\n(llamados tónales 1–2 kHz)',
+     '#1565c0', 'Pastizal'),
+    ('PA-17Tapyta', 17,
+     'Coro de insectos\nPA-17 · Cl. 17',
+     'PA-17 · Cl. 17\nCoro de insectos nocturnos\n(estridulación broadband)',
+     '#2e7d32', 'Pastizal'),
+    ('PA-17Tapyta', 11,
+     'Ruido abiótico\nPA-17 · Cl. 11',
+     'PA-17 · Cl. 11\nRuido abiótico (lluvia)\n(energía difusa plana)',
+     '#37474f', 'Pastizal'),
+    ('PA-17Tapyta', 0,
+     'Sonido mixto\nPA-17 · Cl. 0',
+     'PA-17 · Cl. 0\nSonido mixto\n(candidato a subclustering)',
+     '#6a1b9a', 'Pastizal'),
+    ('EU-16Tapyta', 0,
+     'Eucaliptal A\nEU-16 · Cl. 0',
+     'EU-16 · Cl. 0\nEucaliptal — tipo A\n(n=4 582, Sil alta)',
+     '#7b1fa2', 'Eucaliptal'),
+    ('EU-16Tapyta', 1,
+     'Eucaliptal B\nEU-16 · Cl. 1',
+     'EU-16 · Cl. 1\nEucaliptal — tipo B\n(n=95 418, cluster masivo)',
+     '#9c27b0', 'Eucaliptal'),
+    ('BO-31Tapyta', 1,
+     'Bosque principal\nBO-31 · Cl. 1',
+     'BO-31 · Cl. 1\nBosque — sonido dominante\n(n=3 851)',
+     '#2e7d32', 'Bosque'),
+    ('BO-31Tapyta', 2,
+     'Bosque compacto\nBO-31 · Cl. 2',
+     'BO-31 · Cl. 2\nBosque — cluster compacto\n(n=811, muy homogéneo)',
+     '#43a047', 'Bosque'),
 ]
+
+# Colores de hábitat para el fondo del título de cada panel
+HABITAT_BG = {
+    'Pastizal':   '#fff3e0',   # naranja muy claro
+    'Eucaliptal': '#f3e5f5',   # violeta muy claro
+    'Bosque':     '#e8f5e9',   # verde muy claro
+}
+HABITAT_COLOR = {
+    'Pastizal':   '#e65100',
+    'Eucaliptal': '#6a1b9a',
+    'Bosque':     '#2e7d32',
+}
 
 # ── Parámetros de audio ────────────────────────────────────────────────────────
 SR_TARGET   = 22050
@@ -54,24 +91,24 @@ N_FFT       = 1024
 HOP_LENGTH  = 256
 FMAX        = 8000
 SEGMENT_SEC = 4.0
-N_RANDOM    = 3       # segmentos aleatorios por cluster
 
-np.random.seed(13)
+np.random.seed(42)
 
-# ── Cache de CSVs cargados ────────────────────────────────────────────────────
+# ── Cargar CSVs (con caché) ───────────────────────────────────────────────────
 _csv_cache = {}
 
 def get_site_df(site_id):
     if site_id not in _csv_cache:
         site_dir = os.path.join(BASE_RESULTS, site_id)
-        umap_csv = [f for f in os.listdir(site_dir)
+        fname    = [f for f in os.listdir(site_dir)
                     if 'fase2_umap_hdbscan.csv' in f and 'metrics' not in f][0]
-        _csv_cache[site_id] = pd.read_csv(os.path.join(site_dir, umap_csv))
+        _csv_cache[site_id] = pd.read_csv(os.path.join(site_dir, fname))
+        print(f"  CSV cargado: {site_id} ({len(_csv_cache[site_id]):,} filas)")
     return _csv_cache[site_id]
 
-# ── Funciones utiles ──────────────────────────────────────────────────────────
+# ── Funciones utilitarias ─────────────────────────────────────────────────────
 def load_audio(archivo_origen, t_start):
-    parts = archivo_origen.replace('\\', '/').split('/')
+    parts    = archivo_origen.replace('\\', '/').split('/')
     wav_path = os.path.join(SEAGATE_BASE, parts[0], 'Data', parts[-1])
     if not os.path.exists(wav_path):
         return None
@@ -83,159 +120,210 @@ def load_audio(archivo_origen, t_start):
         return None
 
 def compute_spec(y):
-    D = librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH)
-    S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+    D     = librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH)
+    S_db  = librosa.amplitude_to_db(np.abs(D), ref=np.max)
     freqs = librosa.fft_frequencies(sr=SR_TARGET, n_fft=N_FFT)
     times = librosa.frames_to_time(np.arange(S_db.shape[1]),
                                    sr=SR_TARGET, hop_length=HOP_LENGTH)
     mask = freqs <= FMAX
     return S_db[mask, :], freqs[mask], times
 
-def select_segments(df_cluster):
-    """Retorna (centroide, [3 aleatorios], extremo) como rows del DataFrame."""
-    cx = df_cluster['DIM1'].mean()
-    cy = df_cluster['DIM2'].mean()
-    df_cluster = df_cluster.copy()
-    df_cluster['dist'] = np.sqrt((df_cluster['DIM1'] - cx)**2 +
-                                  (df_cluster['DIM2'] - cy)**2)
-    centroide = df_cluster.nsmallest(1, 'dist').iloc[0]
-    extremo   = df_cluster.nlargest(1, 'dist').iloc[0]
-    # Pool para aleatorios: excluir centroide y extremo
-    pool = df_cluster[(df_cluster.index != centroide.name) &
-                      (df_cluster.index != extremo.name)]
-    n_rand = min(N_RANDOM, len(pool))
-    aleatorios = pool.sample(n=n_rand).itertuples(index=False) if n_rand > 0 else []
-    return centroide, list(aleatorios), extremo
+def select_three(df_cl):
+    """Devuelve (row_centroide, row_aleatorio, row_extremo)."""
+    df = df_cl.copy()
+    cx = df['DIM1'].mean()
+    cy = df['DIM2'].mean()
+    df['dist'] = np.sqrt((df['DIM1'] - cx)**2 + (df['DIM2'] - cy)**2)
+    row_c = df.nsmallest(1, 'dist').iloc[0]
+    row_e = df.nlargest(1, 'dist').iloc[0]
+    pool  = df[(df.index != row_c.name) & (df.index != row_e.name)]
+    row_a = pool.sample(1).iloc[0] if len(pool) > 0 else row_c
+    return row_c, row_a, row_e
 
-# ── Procesar cada cluster seleccionado ───────────────────────────────────────
-print("Procesando clusters seleccionados...")
-cluster_data = []   # lista de dicts con espectrogramas
+# ── Recopilar todos los espectrogramas ────────────────────────────────────────
+print("Cargando datos y calculando espectrogramas...")
 
-for (site_id, cid, label, color) in SELECTED_CLUSTERS:
-    print(f"\n  {label[:40]}...")
-    df_site = get_site_df(site_id)
+all_data = []   # lista de dicts, uno por cluster
+
+for (site, cid, lbl_short, lbl_long, color, habitat) in SELECTED:
+    print(f"\n→ {lbl_short.replace(chr(10),' | ')}")
+    df_site = get_site_df(site)
     df_cl   = df_site[df_site['cluster_hdbscan'] == cid]
     n_seg   = len(df_cl)
-    print(f"    {n_seg} segmentos en el cluster")
+    print(f"  n = {n_seg:,} segmentos")
 
-    if n_seg < 5:
-        print(f"    ⚠ Muy pocos segmentos, omitiendo")
-        continue
+    row_c, row_a, row_e = select_three(df_cl)
 
-    centroide, aleatorios, extremo = select_segments(df_cl)
-
-    # Cargar espectrogramas
-    specs = []
-    rows_ordered = [centroide] + aleatorios + [extremo]
-    col_types    = ['Centroide'] + [f'Aleatorio {i+1}' for i in range(len(aleatorios))] + ['Extremo']
-
-    for row in rows_ordered:
-        if hasattr(row, 'archivo_origen'):
-            y = load_audio(row.archivo_origen, row.tiempo_inicio)
-        else:
-            y = load_audio(row['archivo_origen'], row['tiempo_inicio'])
+    specs = {}
+    for tipo, row in [('centroide', row_c), ('aleatorio', row_a), ('extremo', row_e)]:
+        y = load_audio(row['archivo_origen'], row['tiempo_inicio'])
         if y is not None and len(y) > N_FFT:
-            specs.append(compute_spec(y))
+            specs[tipo] = compute_spec(y)
         else:
-            specs.append(None)
+            specs[tipo] = None
+            print(f"  ⚠ No se pudo cargar: {tipo}")
 
-    cluster_data.append({
-        'label':     label,
+    all_data.append({
+        'site':      site,
+        'cluster':   cid,
+        'lbl_short': lbl_short,
+        'lbl_long':  lbl_long,
         'color':     color,
+        'habitat':   habitat,
         'n_seg':     n_seg,
         'specs':     specs,
-        'col_types': col_types,
-        'site':      site_id,
-        'cluster':   cid,
     })
-    ok = sum(1 for s in specs if s is not None)
-    print(f"    Espectrogramas cargados: {ok}/{len(specs)}")
 
-# ── Construir figura ───────────────────────────────────────────────────────────
-print("\nGenerando figura de consistencia...")
+# ── Función para construir y guardar una figura por tipo ──────────────────────
+def build_figure(tipo, tipo_titulo, tipo_subtitulo, tipo_color_borde, filename):
+    """
+    tipo           : 'centroide' | 'aleatorio' | 'extremo'
+    tipo_titulo    : texto principal del suptitle
+    tipo_subtitulo : descripción breve para la nota al pie
+    tipo_color_borde: color del marco de cada panel para ese tipo
+    filename       : nombre de archivo de salida (sin ruta)
+    """
+    n_clusters = len(all_data)
+    n_cols     = 4
+    n_rows     = int(np.ceil(n_clusters / n_cols))   # 2 filas × 4 columnas = 8
 
-n_rows = len(cluster_data)
-n_cols = 1 + N_RANDOM + 1   # centroide + N_RANDOM + extremo = 5
+    fig = plt.figure(figsize=(18, 5.5 * n_rows + 1.5))
+    fig.patch.set_facecolor('white')
 
-fig_h = 2.5 * n_rows + 1.5
-fig = plt.figure(figsize=(16, fig_h))
-fig.patch.set_facecolor('white')
+    gs = gridspec.GridSpec(n_rows, n_cols, figure=fig,
+                           hspace=0.55, wspace=0.20,
+                           top=0.88, bottom=0.08,
+                           left=0.04, right=0.98)
 
-gs = gridspec.GridSpec(n_rows, n_cols, figure=fig,
-                       hspace=0.50, wspace=0.15,
-                       top=0.95, bottom=0.04,
-                       left=0.15, right=0.97)
+    for idx, cd in enumerate(all_data):
+        row_i = idx // n_cols
+        col_i = idx % n_cols
+        ax    = fig.add_subplot(gs[row_i, col_i])
 
-# Encabezados de columnas
-col_header_labels = ['Centroide\n(cerca del centro)',
-                     'Aleatorio 1', 'Aleatorio 2', 'Aleatorio 3',
-                     'Extremo\n(periferia)']
-col_x_positions = [0.15 + c * (0.82 / n_cols) + 0.082 / n_cols
-                   for c in range(n_cols)]
-for c, (hdr, xpos) in enumerate(zip(col_header_labels, col_x_positions)):
-    style = 'italic' if 'Aleatorio' in hdr else 'normal'
-    fw    = 'bold' if c in (0, 4) else 'normal'
-    fig.text(xpos, 0.965, hdr, ha='center', va='top',
-             fontsize=8, fontweight=fw, fontstyle=style, color='#333333')
+        spec  = cd['specs'].get(tipo)
+        color = cd['color']
+        hab   = cd['habitat']
 
-for row_i, cd in enumerate(cluster_data):
-    color = cd['color']
-
-    for col_i, (spec, ctype) in enumerate(zip(cd['specs'], cd['col_types'])):
-        ax = fig.add_subplot(gs[row_i, col_i])
-
-        if spec is None:
-            ax.text(0.5, 0.5, 'N/D', ha='center', va='center',
-                    transform=ax.transAxes, fontsize=7, color='gray')
-            ax.set_xticks([]); ax.set_yticks([])
-        else:
+        if spec is not None:
             S_db, freqs, times = spec
             ax.pcolormesh(times, freqs / 1000, S_db,
                           shading='auto', cmap='magma',
                           vmin=-60, vmax=0, rasterized=True)
-            ax.set_ylim(0, FMAX / 1000)
             ax.set_xlim(0, SEGMENT_SEC)
-            ax.tick_params(labelsize=6.5)
-            ax.set_yticks([0, 2, 4, 6, 8])
+            ax.set_ylim(0, FMAX / 1000)
+        else:
+            ax.set_facecolor('#f5f5f5')
+            ax.text(0.5, 0.5, 'No disponible',
+                    ha='center', va='center',
+                    transform=ax.transAxes, fontsize=9, color='gray')
 
-            if col_i > 0:
-                ax.set_yticklabels([])
-            else:
-                ax.set_yticklabels(['0', '2', '4', '6', '8'])
-                ax.set_ylabel('kHz', fontsize=7.5, labelpad=2)
+        # Ejes
+        ax.tick_params(labelsize=8)
+        ax.set_yticks([0, 2, 4, 6, 8])
+        if col_i == 0:
+            ax.set_yticklabels(['0', '2', '4', '6', '8'])
+            ax.set_ylabel('Frecuencia (kHz)', fontsize=8.5, labelpad=3)
+        else:
+            ax.set_yticklabels([])
 
-            if row_i < n_rows - 1:
-                ax.set_xticklabels([])
-            else:
-                ax.set_xlabel('s', fontsize=7.5, labelpad=2)
+        if row_i == n_rows - 1:
+            ax.set_xlabel('Tiempo (s)', fontsize=8.5, labelpad=3)
+        else:
+            ax.set_xticklabels([])
 
-        # Borde
+        # Borde del panel (color del cluster)
         for spine in ax.spines.values():
-            spine.set_linewidth(1.8)
+            spine.set_linewidth(2.5)
             spine.set_color(color)
-            # Borde mas grueso en centroide y extremo
-            if col_i in (0, n_cols - 1):
-                spine.set_linewidth(2.5)
 
-    # Etiqueta de la fila (izquierda)
-    fig.text(0.01, 0.95 - row_i * (0.91 / n_rows),
-             cd['label'],
-             va='top', ha='left', fontsize=8, fontweight='bold',
-             color=color)
-    fig.text(0.01, 0.95 - row_i * (0.91 / n_rows) - 0.025,
-             f'n = {cd["n_seg"]:,} segs.',
-             va='top', ha='left', fontsize=7, color='gray')
+        # Título del panel con fondo de hábitat
+        titulo_panel = cd['lbl_long']
+        n_str        = f'n = {cd["n_seg"]:,}'
+        ax.set_title(titulo_panel + f'\n{n_str}',
+                     fontsize=8, fontweight='bold', color=color,
+                     pad=5, loc='center',
+                     bbox=dict(boxstyle='round,pad=0.3',
+                               facecolor=HABITAT_BG[hab],
+                               edgecolor=color, alpha=0.85, linewidth=1.0))
 
-# ── Titulo ──────────────────────────────────────────────────────────────────────
-fig.suptitle(
-    'Consistencia interna de clusters acusticos: centroide / aleatorios / extremo\n'
-    'PA-17 (Pastizal) · EU-16 (Eucaliptal) · BO-31 (Bosque) | Tapyta, Paraguay',
-    fontsize=11, y=0.99, color='#222222'
+        # Número de panel (esquina superior izquierda)
+        panel_letter = ['a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)', 'h)'][idx]
+        ax.text(0.03, 0.97, panel_letter,
+                transform=ax.transAxes, fontsize=10,
+                fontweight='bold', color='white',
+                va='top', ha='left',
+                bbox=dict(boxstyle='round,pad=0.15',
+                          facecolor=color, alpha=0.75, linewidth=0))
+
+    # ── Leyenda de hábitats ────────────────────────────────────────────────────
+    handles_hab = [
+        mpatches.Patch(facecolor=HABITAT_COLOR[h], label=h,
+                       edgecolor=HABITAT_COLOR[h], alpha=0.7)
+        for h in ['Pastizal', 'Eucaliptal', 'Bosque']
+    ]
+    fig.legend(handles=handles_hab, loc='lower center', ncol=3,
+               fontsize=10, frameon=True, framealpha=0.92,
+               edgecolor='#cccccc', bbox_to_anchor=(0.5, 0.01),
+               title='Tipo de hábitat', title_fontsize=9)
+
+    # ── Título general ────────────────────────────────────────────────────────
+    fig.suptitle(
+        f'{tipo_titulo}\n'
+        f'PA-17 (Pastizal) · EU-16 (Eucaliptal) · BO-31 (Bosque) | Tapytá, Paraguay',
+        fontsize=12, y=0.97, color='#222222', fontweight='bold'
+    )
+
+    # Nota al pie
+    fig.text(0.5, 0.048,
+             tipo_subtitulo,
+             ha='center', fontsize=8.5, color='#555555', style='italic')
+
+    # ── Guardar ───────────────────────────────────────────────────────────────
+    out_path = os.path.join(OUT_DIR, filename)
+    fig.savefig(out_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print(f"  Guardada: {out_path}")
+
+
+# ── Generar las 3 figuras ─────────────────────────────────────────────────────
+print("\n--- Generando FigG1: CENTROIDES ---")
+build_figure(
+    tipo='centroide',
+    tipo_titulo='G1 — Centroides: el segmento más representativo de cada cluster',
+    tipo_subtitulo=(
+        'Cada panel muestra el segmento cuyo vector MFCC es más cercano al centroide del cluster en el espacio UMAP 3D. '
+        'Son los "ejemplares tipo" del cluster.'
+    ),
+    tipo_color_borde='solid',
+    filename='FigG1_Centroides_8clusters.png'
 )
 
-# ── Guardar ────────────────────────────────────────────────────────────────────
-out_path = os.path.join(OUT_DIR, 'FigG_Consistencia_Clusters_CentroideAleatorioExtremo.png')
-fig.savefig(out_path, dpi=300, bbox_inches='tight', facecolor='white')
-plt.close()
-print(f"\nFigura guardada: {out_path}")
-print("Script G completado.")
+print("\n--- Generando FigG2: ALEATORIOS ---")
+build_figure(
+    tipo='aleatorio',
+    tipo_titulo='G2 — Aleatorios: muestra interna para verificar consistencia',
+    tipo_subtitulo=(
+        'Cada panel muestra un segmento elegido al azar dentro del cluster. '
+        'Si se parece al centroide (FigG1), el cluster es internamente consistente.'
+    ),
+    tipo_color_borde='dashed',
+    filename='FigG2_Aleatorios_8clusters.png'
+)
+
+print("\n--- Generando FigG3: EXTREMOS ---")
+build_figure(
+    tipo='extremo',
+    tipo_titulo='G3 — Extremos: el segmento más lejano del centro de cada cluster',
+    tipo_subtitulo=(
+        'Cada panel muestra el segmento en la periferia del cluster (máxima distancia al centroide en UMAP). '
+        'Cuanto más se parezca al centroide (FigG1), más homogéneo es el cluster.'
+    ),
+    tipo_color_borde='dotted',
+    filename='FigG3_Extremos_8clusters.png'
+)
+
+print("\nScript G completado. 3 figuras generadas:")
+for f in ['FigG1_Centroides_8clusters.png',
+          'FigG2_Aleatorios_8clusters.png',
+          'FigG3_Extremos_8clusters.png']:
+    print(f"  {os.path.join(OUT_DIR, f)}")
