@@ -1,26 +1,46 @@
 # Ignorar todo por defecto
 *
 
-# Pero no ignorar estos tipos de archivo
-!*.py
-!*.png
-!*.txt
-!*.wav
-
-# No ignorar el archivo .gitignore en sí
-!.gitignore
-
-# No ignorar carpetas (para que Git pueda rastrear archivos permitidos dentro de ellas)
+# NO ignorar carpetas (esto es clave)
 !*/
 
-# Opcional: ignorar carpetas específicas como entornos virtuales o temporales
-venv/
-__pycache__/
+# NO ignorar archivos .py
+!*.py
+
+# NO ignorar documentación del proyecto
+!CLAUDE.md
+!*.md
+
+# NO ignorar configuración de Claude Code
+!.claude/
+!.claude/settings.json
+
+# Ignorar imágenes, audios, datos
+*.wav
+*.mp3
+*.png
+*.jpg
+*.jpeg
 *.parquet
 *.csv
-*.log
-*.ipynb
+*.json
 
-resultados/Salida de Consola_Fase_1_Extraccion de Caracteristicas_Mel.txt
+# Ignorar carpetas de resultados pesados
+figuras_*/
+matching_*/
+validacion_*/
+embeddings_*/
+BD_*/
 
-Papelera/
+# Ignorar entornos virtuales Python
+venv/
+.venv/
+env/
+**/venv/
+**/site-packages/
+
+# Ignorar carpetas de resultados de la campaña (demasiado pesadas para Git)
+resultados_HDD_Seagate/
+modelos_fase2_fase4/
+figuras_inspeccion_clusters/
+Papelera/venv/

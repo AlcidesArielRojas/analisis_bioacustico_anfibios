@@ -108,3 +108,26 @@ def anotar_selection_tables_sitio(sitio: str):
 
 if __name__ == "__main__":
     anotar_selection_tables_sitio(SITIO)
+
+
+import pandas as pd
+from pathlib import Path
+
+BASE = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local")
+R = BASE / "resultados"
+sufijo = "v2_horario18a06_insectos6a12"
+
+sitios = ["BO-Tapyta", "CANTERA1Tapy", "EU-41Tapyta", "PA-41Tapyta"]
+
+total = 0
+for s in sitios:
+    f = R / f"features_{s}_{sufijo}.parquet"
+    df = pd.read_parquet(f)
+    print(s, len(df))
+    total += len(df)
+
+print("Total segmentos:", total)
+
+
+df = pd.read_csv(R / "resumen_segmentos_por_sitio.csv")
+total = df["n_segmentos"].sum()

@@ -1,7 +1,6 @@
 # ================================================================
-# Fase 1 Benchmark (multi-sitio):
-# Extracción de MFCCs con filtro horario + atenuación 6–12 kHz
-# Sitios: BO-81Tapyta, BO-82Tapyta, CANTERA1Tapy, EU-41Tapyta, PA-41Tapyta
+# Fase 1 por campaña / por grabadora
+# Extracción de MFCCs con filtro horario + atenuación de insectos
 # ================================================================
 
 import re
@@ -22,32 +21,38 @@ SR_TARGET = 22050
 N_FFT = 2048
 HOP_LENGTH = 512
 
-FMIN_INSECT = 6000
-FMAX_INSECT = 12000
-BASE_GAIN_DB = -6.0
-MAX_EXTRA_DB = -6.0
-SMOOTH = 0.9
+FMIN_INSECT = 4000      # insectos fuertes empiezan acá
+FMAX_INSECT = 10000     # insectos moderados llegan hasta acá
+BASE_GAIN_DB = -9.0     # atenuación mínima en toda la banda
+MAX_EXTRA_DB = -6.0     # atenuación adicional si la banda domina
+SMOOTH = 0.9            # suavizado temporal (esto ya está bien)
 
-# Sitios a procesar (MODIFICABLE)
-SITIOS = [
-    "BO-81Tapyta",
-    "BO-82Tapyta",
-]
+# =========================
+# CAMPAÑA A PROCESAR
+# =========================
+NOMBRE_CAMPANIA = "Campaña diciembre 2024"
+
+# Ruta base del HDD externo (ajustá la letra si cambia)
+DISCO_EXTERNO = Path(r"D:\\")
+
+# Carpeta de la campaña en el HDD externo
+ruta_campania = DISCO_EXTERNO / NOMBRE_CAMPANIA
+
+# Carpeta base de resultados en tu PC
+BASE_RESULTADOS = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local") / "resultados_HDD_Seagate" / NOMBRE_CAMPANIA
+BASE_RESULTADOS.mkdir(parents=True, exist_ok=True)
 
 # Sufijo distintivo para esta corrida (MODIFICABLE)
 SUFIJO_CORRIDA = "v2_horario18a06_insectos6a12"
 
-ruta_base_externa = Path(r"D:\\")
-ruta_salida = Path(r"C:\Users\User\Proyecto_Paisajes_Sonoros_Repositorio_Local\resultados")
-ruta_salida.mkdir(exist_ok=True)
-
 def validar_entorno():
-    if not ruta_base_externa.exists():
-        raise RuntimeError(f"⚠️ Disco externo no encontrado: {ruta_base_externa}")
+    if not ruta_campania.exists():
+        raise RuntimeError(f"⚠️ No se encontró la campaña en el disco externo: {ruta_campania}")
     try:
         import pyarrow  # noqa: F401
     except Exception:
         print("⚠️ pyarrow no está disponible. Instalá: pip install pyarrow==15.0.2")
+
 
 def extraer_hora_desde_nombre(nombre_archivo: str) -> int:
     base = Path(nombre_archivo).stem
@@ -57,8 +62,10 @@ def extraer_hora_desde_nombre(nombre_archivo: str) -> int:
     hhmmss = m.group(1)
     return int(hhmmss[0:2])
 
+
 def es_hora_anfibios(hora: int) -> bool:
     return (hora >= 18) or (hora < 6)
+
 
 def adaptive_attenuation(y, sr,
                          fmin=FMIN_INSECT, fmax=FMAX_INSECT,
@@ -90,6 +97,7 @@ def adaptive_attenuation(y, sr,
     y_out = librosa.istft(S_new, hop_length=hop_length, window='hann')
     return y_out
 
+
 def procesar_segmento(segmento, sr):
     try:
         mfccs = librosa.feature.mfcc(y=segmento.astype(np.float32), sr=sr, n_mfcc=NUM_MFCC)
@@ -97,6 +105,7 @@ def procesar_segmento(segmento, sr):
     except Exception as e:
         print(f"[ERROR] procesar_segmento: {e}")
         return None
+
 
 def procesar_archivo(ruta: Path, sitio: str):
     try:
@@ -142,21 +151,27 @@ def procesar_archivo(ruta: Path, sitio: str):
         print(f"[ERROR] {ruta.name}: {e}")
         return None
 
+
 def correr_fase1_para_sitio(sitio: str):
     print(f"\n==============================")
-    print(f"Procesando sitio: {sitio}")
+    print(f"Procesando grabadora: {sitio}")
+    print(f"Campaña: {NOMBRE_CAMPANIA}")
     print(f"==============================")
 
-    ruta_temporales = ruta_salida / f"temporales_fase1_{sitio}_{SUFIJO_CORRIDA}"
+    # Carpeta de resultados específica para esta grabadora
+    ruta_salida_sitio = BASE_RESULTADOS / sitio
+    ruta_salida_sitio.mkdir(parents=True, exist_ok=True)
+
+    ruta_temporales = ruta_salida_sitio / f"temporales_fase1_{sitio}_{SUFIJO_CORRIDA}"
     ruta_temporales.mkdir(parents=True, exist_ok=True)
 
-    ruta_features_final = ruta_salida / f"features_{sitio}_{SUFIJO_CORRIDA}.parquet"
-    ruta_resumen = ruta_salida / f"resumen_segmentos_por_sitio_{sitio}_{SUFIJO_CORRIDA}.csv"
+    ruta_features_final = ruta_salida_sitio / f"features_{sitio}_{SUFIJO_CORRIDA}.parquet"
+    ruta_resumen = ruta_salida_sitio / f"resumen_segmentos_por_sitio_{sitio}_{SUFIJO_CORRIDA}.csv"
 
-    carpeta = ruta_base_externa / sitio
+    carpeta = ruta_campania / sitio
     data_dir = carpeta / "Data"
     if not data_dir.exists():
-        print(f"⚠️ No se encontró la carpeta 'Data' en {carpeta}, se salta este sitio.")
+        print(f"⚠️ No se encontró la carpeta 'Data' en {carpeta}, se salta esta grabadora.")
         return
 
     archivos = list(data_dir.rglob("*.wav"))
@@ -189,7 +204,7 @@ def correr_fase1_para_sitio(sitio: str):
         else:
             print(f"⚠️ Lote vacío: {nombre_lote}")
 
-    lotes = sorted((ruta_salida / f"temporales_fase1_{sitio}_{SUFIJO_CORRIDA}").glob("lote_*.parquet"))
+    lotes = sorted(ruta_temporales.glob("lote_*.parquet"))
     if len(lotes) == 0:
         print(f"⚠️ {sitio}: no se encontraron lotes para concatenar.")
         return
@@ -214,7 +229,38 @@ def correr_fase1_para_sitio(sitio: str):
     else:
         print(f"⚠️ {sitio}: no se pudo construir el features final.")
 
+
 if __name__ == "__main__":
     validar_entorno()
-    for sitio in SITIOS:
-        correr_fase1_para_sitio(sitio)
+
+    # Detectar todas las grabadoras en el disco externo (campaña)
+    grabadoras = [p.name for p in ruta_campania.iterdir() if p.is_dir()]
+    grabadoras = sorted(grabadoras)
+
+    print("\nGrabadoras detectadas en la campaña:")
+    for g in grabadoras:
+        print(" -", g)
+
+    # Detectar cuáles faltan procesar:
+    # condición: tiene Data en el disco externo PERO no tiene features finales en BASE_RESULTADOS
+    sitios_pendientes = []
+    for sitio in grabadoras:
+        carpeta = ruta_campania / sitio
+        data_dir = carpeta / "Data"
+
+        ruta_salida_sitio = BASE_RESULTADOS / sitio
+        ruta_features_final = ruta_salida_sitio / f"features_{sitio}_{SUFIJO_CORRIDA}.parquet"
+
+        if data_dir.exists() and not ruta_features_final.exists():
+            sitios_pendientes.append(sitio)
+
+    print("\nGrabadoras pendientes de procesar (con Data y sin features finales):")
+    if not sitios_pendientes:
+        print(" - Ninguna. Todo está procesado para esta campaña.")
+    else:
+        for s in sitios_pendientes:
+            print(" -", s)
+
+        # Procesar solo las pendientes
+        for sitio in sitios_pendientes:
+            correr_fase1_para_sitio(sitio)
