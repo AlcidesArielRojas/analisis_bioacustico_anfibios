@@ -63,8 +63,8 @@ print("\nGenerando figura antes/después...")
 
 fig = plt.figure(figsize=(17, 7.5))
 fig.patch.set_facecolor('white')
-gs = GridSpec(1, 2, figure=fig, wspace=0.08,
-              left=0.04, right=0.97, top=0.87, bottom=0.09)
+gs = GridSpec(1, 2, figure=fig, wspace=0.28,
+              left=0.07, right=0.97, top=0.87, bottom=0.09)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PANEL IZQUIERDO: UMAP global con Cluster 0 resaltado

@@ -121,9 +121,9 @@ data_ruido       = {h: df_all[df_all['habitat'] == h]['proporcion_ruido_pct'].to
 # ── Figura ──────────────────────────────────────────────────────────────────────
 np.random.seed(42)
 
-fig = plt.figure(figsize=(16, 5.5))
+fig = plt.figure(figsize=(16, 6.5))
 fig.patch.set_facecolor('white')
-gs = GridSpec(1, 3, figure=fig, wspace=0.38, left=0.07, right=0.97, top=0.85, bottom=0.14)
+gs = GridSpec(1, 3, figure=fig, wspace=0.38, left=0.07, right=0.97, top=0.80, bottom=0.18)
 
 # Panel 1: Número de clusters
 ax1 = fig.add_subplot(gs[0])
@@ -148,14 +148,14 @@ violin_panel(ax3, data_ruido, 'proporcion_ruido_pct',
 # ── Leyenda compartida ─────────────────────────────────────────────────────────
 handles = [mpatches.Patch(facecolor=COLORS[h], label=f'{h} (n={len(data_nclusters[h])})',
                            edgecolor=COLORS[h], alpha=0.75) for h in ORDER]
-fig.legend(handles=handles, loc='upper center', ncol=3, fontsize=10.5,
+fig.legend(handles=handles, loc='lower center', ncol=3, fontsize=10.5,
            frameon=True, framealpha=0.9, edgecolor='#cccccc',
-           bbox_to_anchor=(0.52, 0.97))
+           bbox_to_anchor=(0.52, 0.04))
 
 # ── Título general ─────────────────────────────────────────────────────────────
 fig.suptitle('Comparación de métricas acústicas por tipo de hábitat\n'
              'Campaña Noviembre–Diciembre 2024 | Bosque Atlántico Interior, Tapytá',
-             fontsize=12, y=1.03, fontstyle='italic', color='#333333')
+             fontsize=12, y=0.97, fontstyle='italic', color='#333333')
 
 # ── Guardar ────────────────────────────────────────────────────────────────────
 out_path = os.path.join(OUT_DIR, 'FigD_Violin_Comparacion_Habitats.png')
