@@ -1,4 +1,4 @@
-# Proyecto Paisajes Sonoros — Bosque Atlántico Interior, Tapytá, Paraguay
+# Proyecto Paisajes Sonoros — Bosque Atlántico del Alto Paraná, Tapytá, Paraguay
 > Este archivo es leído automáticamente por Claude Code al inicio de cada sesión.
 > Contiene todo el contexto necesario para retomar el trabajo sin perder tiempo.
 
@@ -6,7 +6,7 @@
 
 ## 🎯 ¿De qué trata este proyecto?
 
-**Monitoreo Acústico Pasivo (PAM)** de anfibios en el Bosque Atlántico Interior de Tapytá, Paraguay.
+**Monitoreo Acústico Pasivo (PAM)** de anfibios en el Bosque Atlántico del Alto Paraná de Tapytá, Paraguay.
 
 El pipeline analiza grabaciones nocturnas registradas con grabadoras autónomas (AudioMoth), extrae características acústicas (MFCCs), aplica reducción dimensional (UMAP) y agrupamiento automático (HDBSCAN) para identificar y clasificar tipos de sonidos sin supervisión humana.
 

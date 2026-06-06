@@ -1,6 +1,6 @@
 # Pipeline de Análisis Acústico — Paisajes Sonoros Tapytá
 
-**Monitoreo Acústico Pasivo (PAM) de anfibios en el Bosque Atlántico Interior**
+**Monitoreo Acústico Pasivo (PAM) de anfibios en el Bosque Atlántico del Alto Paraná**
 Reserva Natural Tapytá, Caazapá, Paraguay — Campaña noviembre–diciembre 2024
 
 ---
