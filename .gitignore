@@ -64,6 +64,11 @@ BD_anfibios_wav/
 BD anfibios/
 Dendrosophus spp/
 
+# --- Documentos con resultados (privados; GitHub solo documenta metodologia) ---
+Campaña_Diciembre_2024/06_Documento_Tecnico/documento_tecnico_paisajes_sonoros.tex
+Campaña_Diciembre_2024/06_Documento_Tecnico/guia_personal_paisajes_sonoros.tex
+Campaña_Diciembre_2024/06_Documento_Tecnico/abstract_SOLABIMA2026_preview.tex
+
 # --- Entornos virtuales Python ---
 venv/
 .venv/
@@ -74,6 +79,10 @@ Papelera/
 __pycache__/
 *.pyc
 *.pyo
+
+# --- Config local / temporales sueltos ---
+.claude/settings.local.json
+*.tmp.*
 
 # --- NO ignorar: scripts Python y documentacion ---
 !*.py

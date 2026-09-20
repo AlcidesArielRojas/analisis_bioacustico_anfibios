@@ -27,31 +27,76 @@ El pipeline analiza grabaciones nocturnas registradas con grabadoras autónomas 
 
 ---
 
+## 🔄 Protocolo de cierre de sesión (coordinación entre PC y notebook)
+
+Este proyecto se trabaja desde dos máquinas (ver sección "Entornos Python"). Como el chat de Claude
+Code **no se sincroniza** entre máquinas (cada una guarda su propio historial local), este archivo es
+el único canal de coordinación que ambas cargan automáticamente.
+
+**Regla fija: al cerrar cada sesión de trabajo (en cualquiera de las dos máquinas), actualizar la
+sección "📌 Tareas pendientes" de este mismo archivo con un resumen breve de qué se hizo** (fecha +
+2-3 líneas: qué se tocó, qué quedó a medias, qué decidir la próxima vez). Así la otra máquina lo ve
+apenas Claude Code abra este archivo, sin depender de memoria ni de avisos manuales.
+
+### ⚠️ Respaldo: rutina automática al INICIO de sesión (por si no se pudo anotar al cerrar)
+
+El usuario suele cerrar la sesión de golpe (cerrar la terminal o apagar la PC directamente, sin avisar
+que terminó) — en ese caso la nota de cierre de arriba **no llega a escribirse**. Como red de seguridad:
+
+**Al iniciar cualquier sesión en este proyecto, antes de asumir que la última "Nota de sesión" de más
+arriba refleja el estado real:**
+1. Correr `git log -3 --oneline` y `git status --short` para ver si hay algo (commits, cambios sin
+   commitear) que no esté mencionado en la nota más reciente.
+2. Revisar fechas de modificación de archivos tocados recientemente (ej. `find <carpeta> -newermt
+   "<fecha de la última nota>"`) para detectar trabajo que se hizo pero no quedó documentado.
+3. Si aparece actividad no documentada, **reconstruir automáticamente qué se hizo** (a partir de esas
+   fechas/commits, sin necesidad de que el usuario lo explique) y agregar una nota retroactiva en
+   "Tareas pendientes → Notas de sesión" ANTES de seguir con el pedido del usuario — igual que se hizo
+   el 2026-09-17 al reconstruir el trabajo del 11-13 de septiembre.
+4. Si el usuario menciona algo que hizo y no coincide con lo que quedó escrito, priorizar lo que diga
+   el usuario y corregir la nota.
+
+---
+
 ## 💻 Entornos Python — REGLAS CRÍTICAS
 
-### Entorno principal (para TODO el análisis):
-```
-Nombre:     paisajes_matching
-Ruta:       /c/Users/User/miniconda3/envs/paisajes_matching/python
-```
-**Cómo correr scripts:**
+Este proyecto se trabaja desde **dos máquinas** (PC de escritorio y notebook), cada una con su propio
+usuario de Windows y por lo tanto su propia ruta de conda. El entorno `paisajes_matching` está
+replicado (mismos paquetes, ver `requirements.txt`) en ambas. **A partir de julio 2026 el trabajo
+principal se hace desde la notebook** (uso de la PC de escritorio muy reducido).
+
+| Máquina | Usuario Windows | Ruta del entorno |
+|---------|------------------|-------------------|
+| PC de escritorio | `User` | `/c/Users/User/miniconda3/envs/paisajes_matching/python` |
+| Notebook | `Alcides` | `/c/Users/Alcides/miniconda3/envs/paisajes_matching/python` |
+
+**Antes de correr un script, detectar en qué máquina se está** (`whoami` o `echo $USERNAME`) y usar
+la ruta correspondiente.
+
+**Cómo correr scripts (ejemplo notebook):**
 ```bash
-PYTHONUTF8=1 /c/Users/User/miniconda3/envs/paisajes_matching/python nombre_script.py
+PYTHONUTF8=1 /c/Users/Alcides/miniconda3/envs/paisajes_matching/python nombre_script.py
 ```
-**Cómo correr código inline:**
+**Cómo correr código inline (ejemplo notebook):**
 ```bash
-PYTHONUTF8=1 /c/Users/User/miniconda3/envs/paisajes_matching/python -c "..."
+PYTHONUTF8=1 /c/Users/Alcides/miniconda3/envs/paisajes_matching/python -c "..."
 ```
 El prefijo `PYTHONUTF8=1` es **obligatorio** en Windows para evitar errores con tildes y ñ.
 
 ### Entorno base (solo para PDF con pypdf/pdfplumber):
 ```
-Ruta:  /c/Users/User/miniconda3/python
+PC de escritorio:  /c/Users/User/miniconda3/python
+Notebook:          /c/Users/Alcides/miniconda3/python
 ```
 
 ### ⚠️ Nunca usar:
 - `python3` o `python` solos → stub de Microsoft Store
 - `py` → puede fallar
+
+### 💾 Disco duro externo Seagate
+Es un disco físico USB — solo está disponible en la máquina a la que esté conectado en ese momento
+(ver sección "Disco Duro Externo Seagate" más abajo). Si `/e/` no existe, primero revisar que el
+disco esté enchufado a la máquina actual antes de asumir un error.
 
 ---
 
@@ -278,6 +323,43 @@ Xu 2025, Canas 2023, Frasier 2021, Aide 2013.
 ---
 
 ## 📌 Tareas pendientes
+
+### 📝 Notas de sesión (más reciente primero)
+
+**2026-09-17 (PC de escritorio):** Sesión de verificación de sincronización PC↔notebook (sin cambios
+al pipeline). Se confirmó que `documento_tecnico_paisajes_sonoros.tex/pdf` y
+`guia_personal_paisajes_sonoros.tex/pdf` (actualizados 11-13 sept, probablemente desde la notebook)
+llegaron bien vía Dropbox.
+
+Se investigó el estado de git y se hicieron dos cosas:
+- **Se identificaron los archivos grandes atrapados en la historia de git** (commits de mayo 2026,
+  antes del `.gitignore` actual): ~1026 MB en 2322 blobs — `.wav` 652.3 MB (1922 archivos, audio que
+  nunca debió commitearse), `.txt` 292.8 MB (124 archivos, tablas `selection_tables_por_cluster...`
+  de Raven), `.png` 75.9 MB (152 archivos, figuras de resultados). El resto (`.py`/`.md`/etc., ~5 MB)
+  sí corresponde al repo.
+- **Se movió `.git_backup_pre_purge_20260822_212253/` (2.4 GB, copia de seguridad de un intento de
+  purga del 22 ago que nunca se completó) fuera de Dropbox**, a `D:\Backups_Git\Proyecto_Paisajes_Sonoros\`
+  en la PC de escritorio (disco "Almacenamiento EX (D)"). Verificado con robocopy: 5755 archivos,
+  2.4 GB, 0 errores, copia idéntica antes de borrar el original. Esto liberó 2.4 GB de la carpeta
+  sincronizada — **la copia de este backup NO está en Dropbox, solo existe en el disco D: de la PC de
+  escritorio.**
+
+**PENDIENTE (a propósito, no se tocó todavía — se decidió continuar en otra sesión, posiblemente
+desde la notebook):**
+1. El repo de git sigue en el commit del 6 jun 2026 (`25130b8`, igual que `origin/main` en GitHub).
+   Hay cambios sin commitear en `CLAUDE.md`, `.gitignore` y `.claude/settings.json` (ediciones del
+   9 jul nunca guardadas), más `.claude/settings.local.json` y `Antecedentes_Literatura_Cientifica/`
+   sin trackear. **Resolver esto primero**, antes de tocar la historia de git.
+2. Terminar la purga real de historia con `git filter-repo` (o BFG) para sacar los `.wav`/`.txt`/`.png`
+   listados arriba (~1 GB) — reduciría el `.git` de 701 MB a probablemente <50 MB. No hacerlo con las
+   dos máquinas escribiendo al mismo repo al mismo tiempo (el `.git` vive dentro de Dropbox — riesgo
+   de corromperlo si se usa desde ambas casi al mismo tiempo). Hacer `git fetch`/`pull` primero en la
+   máquina donde se retome esto para partir de un estado limpio.
+
+**2026-09-11 a 13 (notebook, inferido por timestamps):** Se revisó/actualizó
+`guia_personal_paisajes_sonoros` (con subrayados, ver backup `..._CON_SUBRAYADOS_backup.pdf`) y
+`documento_tecnico_paisajes_sonoros`. No se generó commit de git (son archivos ignorados a propósito,
+ver `.gitignore`).
 
 ### Para el congreso SOLABIMA 2026:
 - [ ] **Abstract** (texto plano + LaTeX, sin tablas ni figuras)
