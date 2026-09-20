@@ -326,6 +326,23 @@ Xu 2025, Canas 2023, Frasier 2021, Aide 2013.
 
 ### 📝 Notas de sesión (más reciente primero)
 
+**2026-09-20 (PC de escritorio):** Se resolvió lo pendiente del 17 de sept:
+1. Commit `baae411` (CLAUDE.md, .gitignore, settings.json, INDICE_PAPERS.md) commiteado y pusheado.
+2. Se instaló `git-filter-repo` y se purgó de **toda la historia de git** (no de Dropbox — ningún
+   archivo de la carpeta del proyecto se tocó) el contenido de `Datos/`, `Salida/`, `figuras/`,
+   `figuras_PA-41Tapyta/`, `figuras_inspeccion_clusters/`, `resultados/`,
+   `selection_tables_por_cluster*/` y `.gitignore.txt` — los `.wav`/`.txt`/`.png` de mayo 2026 que
+   quedaron expuestos en el repo público de GitHub antes de que existiera el `.gitignore` actual.
+   `requirements.txt` y todo el código se preservaron intactos (verificado).
+3. `.git` bajó de 701 MB a **1.3 MB**. Se hizo `git push origin main --force` — GitHub ya sirve la
+   historia limpia (commit actual: `6748689`). **Importante:** los hashes de todos los commits
+   cambiaron por la reescritura; si alguna otra copia local (ej. la notebook) tiene un clon viejo del
+   repo, va a divergir — conviene que en la notebook se haga `git fetch origin && git reset --hard
+   origin/main` (sin cambios locales pendientes ahí) en vez de un `pull` normal.
+4. El backup completo de la historia vieja (con los archivos grandes, por si hiciera falta recuperar
+   algo) sigue disponible en `D:\Backups_Git\Proyecto_Paisajes_Sonoros\` en esta PC de escritorio
+   (fuera de Dropbox, no se sincroniza).
+
 **2026-09-17 (PC de escritorio):** Sesión de verificación de sincronización PC↔notebook (sin cambios
 al pipeline). Se confirmó que `documento_tecnico_paisajes_sonoros.tex/pdf` y
 `guia_personal_paisajes_sonoros.tex/pdf` (actualizados 11-13 sept, probablemente desde la notebook)
