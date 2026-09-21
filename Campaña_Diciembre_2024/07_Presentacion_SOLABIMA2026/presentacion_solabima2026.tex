@@ -35,26 +35,54 @@
   bioacústicas mediante aprendizaje automático no supervisado}
 \subtitle{Prueba de concepto --- Reserva Natural Tapytá, Paraguay}
 
-% TODO: completar autores/afiliaciones definitivos antes de enviar
-\author[A.~Rojas et al.]{Alcides Rojas \and colaboradores}
-\institute[]{Facultad Politécnica, Universidad Nacional de Asunción\\
-  \textit{colaboración con Fundación Moisés Bertoni y otras instituciones}}
+% Autores tomados del resumen enviado a SOLABIMA 2026 (se corrigio "Alcides Roja" -> "Alcides Rojas").
+% Alcides Rojas resaltado en negrita (autor presentador).
+\author[A.~Rojas et al.]{%
+  \scriptsize
+  \textbf{Alcides Rojas}\inst{1} \and
+  Pastor E.~Pérez Estigarribia\inst{1} \and
+  Myriam C.~Velázquez\inst{2} \and
+  Carlos A.~Giménez\inst{2} \and
+  Mariela Martínez\inst{1} \and
+  Jhon F.~Mongelos\inst{3} \and
+  Fredy Ramírez Pinto\inst{2} \and
+  Victor A.~Mujica\inst{2} \and
+  María Laura Rodríguez Yakisich\inst{2} \and
+  Luis Salgueiro\inst{2} \and
+  Ernesto R.~Krauczuk\inst{4} \and
+  Santiago Perea\inst{5} \and
+  Miguel García Torres\inst{6} \and
+  Noé U.~de la Sancha\inst{7} \and
+  Julio César Mello-Román\inst{1}
+}
+\institute[]{%
+  \tiny
+  $^{1}$Facultad Politécnica, UNA, Paraguay \quad
+  $^{2}$Fundación Moisés Bertoni, Paraguay \quad
+  $^{3}$Fac.\ de Ciencias Exactas y Naturales, UNA, Paraguay \\[2pt]
+  $^{4}$Parque Provincial Sierra Ing.~Martínez Crovetto, MERNR, Argentina \quad
+  $^{5}$Dept.\ Forest \& Wildlife Ecology, U.\ Wisconsin--Madison, USA \\[2pt]
+  $^{6}$Data Science and Big Data Lab, U.\ Pablo de Olavide, Sevilla, España \quad
+  $^{7}$Dept.\ Environmental Science, DePaul University, Chicago, USA
+}
 \date{SOLABIMA 2026}
 
 \begin{document}
 
 % ============================================================
 \begin{frame}
+  % Logos arriba de todo, antes del recuadro de titulo.
+  % PINV01-530 y ARASY ESTR01-23 corren bajo CONACYT/PROCIENCIA (FEEI) -- por eso esos dos logos
+  % (NO PRONII, que es un programa distinto que no financia proyectos).
+  \begin{center}
+    \includegraphics[height=0.7cm]{logos/logo_conacyt.png}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_prociencia.png}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_fpuna.pdf}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_fmb.png}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_solabima.png}
+  \end{center}
+  \vspace{0.3em}
   \titlepage
-  % TODO: logos institucionales (subir archivos a una carpeta logos/ y descomentar).
-  % ARASY no tiene logo propio (confirmado por el usuario y por conacyt.gov.py/arasy).
-  % Sugeridos: CONACYT Paraguay (financia PINV01-530 y ARASY ESTR01-23),
-  % FP-UNA/NIDTEC (institucion ejecutora), Fundacion Moises Bertoni, SOLABIMA.
-  % \begin{center}
-  %   \includegraphics[height=1cm]{logos/logo_conacyt.png}\hspace{1em}
-  %   \includegraphics[height=1cm]{logos/logo_fpuna.png}\hspace{1em}
-  %   \includegraphics[height=1cm]{logos/logo_fmb.png}
-  % \end{center}
 \end{frame}
 % ============================================================
 
@@ -264,12 +292,26 @@
   \end{block}
   \vspace{0.3em}
   Las diferencias entre hábitats se evalúan mediante \textbf{pruebas de
-  permutación} (10.000 réplicas) de $R_s$, $H_s$, $D_s$ (dominancia).
+  permutación} (10.000 réplicas) de $R_s$, $H_s$, $D_s$ (dominancia,
+  $D_s=\sum_k q_{k,s}^2$).
 
   \vspace{0.5em}
-  {\footnotesize \textit{Nota: $R_s$ corresponde a los valores ya reportados;
-  el cálculo de $H_s$/$D_s$ y el resultado formal de la prueba de permutación
-  quedan pendientes (no están aún en el pipeline procesado).}\par}
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{lccc}
+      \toprule
+      \textbf{Hábitat} & $\overline{R_s}$ & $\overline{H_s}$ & $\overline{D_s}$ \\
+      \midrule
+      Pastizal   & 28{,}6 & 2{,}76 & 0{,}189 \\
+      Bosque     &  9{,}8 & 1{,}45 & 0{,}378 \\
+      Eucaliptal &  4{,}8 & 0{,}67 & 0{,}669 \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  {\footnotesize Prueba de permutación (10.000 réplicas): diferencias entre
+  hábitats significativas en las tres métricas
+  ($R_s$: $p=0{,}0037$; $H_s$: $p=0{,}0072$; $D_s$: $p=0{,}0229$).\par}
 \end{frame}
 
 % ============================================================
@@ -361,33 +403,41 @@
 \begin{frame}{Agradecimientos}
 % ============================================================
   \begin{itemize}
-    \item Financiamiento: \textbf{CONACYT Paraguay} --- Programa Nacional de
-      Incentivo a la Investigación (\textbf{PINV01-530}) y proyecto
-      estratégico \textbf{ARASY} (ESTR01-23): \textit{``Potenciamiento de las
-      capacidades de modelamiento matemático computacional para la tierra y
-      la vida''} (Programa PROCIENCIA~II / FEEI, ejecutado por FP-UNA/NIDTEC).
+    \item Financiamiento: \textbf{CONACYT Paraguay}, Programa
+      \textbf{PROCIENCIA} (fondos FEEI) --- proyecto de investigación
+      \textbf{PINV01-530} y proyecto estratégico \textbf{ARASY} (ESTR01-23):
+      \textit{``Potenciamiento de las capacidades de modelamiento matemático
+      computacional para la tierra y la vida''} (ejecutado por FP-UNA/NIDTEC).
     \item Colaboración: Fundación Moisés Bertoni y equipo de campo en
       Reserva Natural Tapytá.
     \item Código disponible en:\\
       \url{https://github.com/AlcidesArielRojas/analisis_bioacustico_anfibios}
   \end{itemize}
   \vspace{1em}
-  % TODO: logos institucionales (misma carpeta logos/ que la portada).
-  % ARASY no tiene logo propio (confirmado) -> se representa con el logo de
-  % CONACYT (financia PINV y ARASY) y el de FP-UNA/NIDTEC (institucion ejecutora).
-  % \begin{center}
-  %   \includegraphics[height=1cm]{logos/logo_conacyt.png}\hspace{1em}
-  %   \includegraphics[height=1cm]{logos/logo_fpuna.png}\hspace{1em}
-  %   \includegraphics[height=1cm]{logos/logo_fmb.png}\hspace{1em}
-  %   \includegraphics[height=1cm]{logos/logo_solabima.png}
-  % \end{center}
+  % PINV01-530 y ARASY ESTR01-23 corren bajo CONACYT/PROCIENCIA (FEEI) -- por eso esos dos logos
+  % (NO PRONII, que es un programa distinto que no financia proyectos).
+  \begin{center}
+    \includegraphics[height=0.7cm]{logos/logo_conacyt.png}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_prociencia.png}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_fpuna.pdf}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_fmb.png}
+  \end{center}
 \end{frame}
 
 % ============================================================
 \begin{frame}
-  \centering
-  \Large \textbf{¡Gracias!}\\[1em]
-  \normalsize Preguntas y comentarios
+% Diapositiva de cierre: identica a la portada (mismos autores/logos e institucion),
+% pero el subtitulo del recuadro cambia a "GRACIAS" en vez de la descripcion de la PoC.
+  \begin{center}
+    \includegraphics[height=0.7cm]{logos/logo_conacyt.png}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_prociencia.png}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_fpuna.pdf}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_fmb.png}\hspace{0.6em}
+    \includegraphics[height=0.7cm]{logos/logo_solabima.png}
+  \end{center}
+  \vspace{0.3em}
+  \subtitle{¡GRACIAS!}
+  \titlepage
 \end{frame}
 % ============================================================
 

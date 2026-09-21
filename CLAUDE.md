@@ -326,6 +326,45 @@ Xu 2025, Canas 2023, Frasier 2021, Aide 2013.
 
 ### 📝 Notas de sesión (más reciente primero)
 
+**2026-09-21 (PC de escritorio), cierre de sesión:** El usuario ya está editando
+`presentacion_solabima2026.tex` **directamente en Overleaf** (no en este archivo local) — mi copia
+local la mantengo espejada con lo que se fue pegando en Overleaf, pero **verificar cuál es más
+reciente antes de asumir nada** la próxima vez. Estado al cerrar (17 diapositivas, ya compiló bien):
+- Autores completos (15, Alcides Rojas resaltado) con afiliaciones en texto corrido compacto
+  (`$^n$` + `\quad`/`\\`, NO `\inst{}` en el `\institute{}` porque genera lista vertical en Beamer).
+- Diapositiva de cierre = portada con `\subtitle{¡GRACIAS!}` en vez de la descripción de la PoC.
+  `\date{}` corregido a "Noviembre 2026" (mes real de SOLABIMA 2026, confirmado por el usuario).
+- **Logos ya resueltos y activados:** CONACYT, PROCIENCIA, FP-UNA (convertido de SVG a PDF con
+  `svglib`/`reportlab`, sin necesitar Cairo), Fundación Moisés Bertoni, SOLABIMA 2026. Archivos en
+  `07_Presentacion_SOLABIMA2026/logos/` (los que se usan) y `logos_raw/` (alternativas descartadas,
+  por si se quiere cambiar — ojo, esta carpeta tiene `.gif`/`.webp` que **no están cubiertos por el
+  `.gitignore` actual**, no hacer `git add` amplio ahí sin revisar). Tamaño `height=0.7cm` en fila de
+  5 para que entren sin desbordar.
+- Diapositiva "Diversidad acústica" se dividió en dos (metodología / resultados) porque una sola no
+  entraba — ya con los valores reales calculados (ver nota anterior) y prueba de permutación.
+- Nada quedó pendiente explícito de esta sesión — el usuario va a seguir en otra sesión, probablemente
+  revisando detalles visuales tras compilar en Overleaf.
+
+**2026-09-21 (PC de escritorio):** Se calculó $R_s$/$H_s$/$D_s$ real (Riqueza, Entropía Shannon,
+Dominancia Simpson) por sitio y la prueba de permutación (10.000 réplicas), pendiente desde el
+20-sept. Nuevo script verificado: `01_Scripts/Fase5_Diversidad_Riqueza_Entropia_Dominancia.py`.
+**Lógica de reconstrucción del cluster final:** tipo = `(cluster_hdbscan, subcluster_id)` si
+`subcluster_id>=0`, si no `(cluster_hdbscan, -1)`; excluyendo ruido HDBSCAN (`cluster_hdbscan==-1`).
+**Verificado: la suma de $R_s$ en los 20 sitios da exactamente 265** (coincide con lo publicado) —
+confirma que la reconstrucción es correcta antes de confiar en $H_s$/$D_s$/permutación.
+Resultado: diferencias entre hábitats significativas en las 3 métricas
+(Pastizal $\overline{R_s}=28{,}6$, $\overline{H_s}=2{,}76$, $\overline{D_s}=0{,}189$;
+Bosque 9,8 / 1,45 / 0,378; Eucaliptal 4,8 / 0,67 / 0,669;
+permutación: $R_s\,p=0{,}0037$, $H_s\,p=0{,}0072$, $D_s\,p=0{,}0229$). Ya actualizado en la
+diapositiva "Diversidad acústica" de `presentacion_solabima2026.tex` (reemplazó la nota de
+"pendiente"). **Pendiente:** decidir si estos resultados también se agregan al documento técnico/
+personal (ahí no están, solo en el resumen como metodología planeada y ahora en la presentación).
+
+También en la presentación (mismo día): lista completa de 15 autores (Alcides Rojas resaltado,
+corregido typo "Roja"→"Rojas") en portada; diapositiva final ahora es una copia de la portada +
+"¡GRACIAS!". El usuario va a seguir editando **directamente en Overleaf** de acá en más (no en este
+archivo local) — verificar antes de asumir que el `.tex` local sigue siendo la versión más reciente.
+
 **2026-09-20 (PC de escritorio), cierre de sesión:** Presentación
 `presentacion_solabima2026.tex` ya **subida a Overleaf y compartida con Pastor** para revisión. Estado
 al cerrar:
@@ -380,6 +419,15 @@ vía PROCIENCIA II/FEEI, ejecutado por FP-UNA/NIDTEC. **No tiene logo propio** (
 usuario y por conacyt.gov.py/arasy) — se usa el logo de CONACYT + FP-UNA/NIDTEC en su lugar. Ya
 actualizado en la diapositiva de Agradecimientos del `.tex`. Sigue pendiente: el usuario debe subir
 los archivos de logo reales a una carpeta `logos/` para descomentar esas líneas.
+
+**Corrección (2026-09-21):** "PINV" NO es "Programa Nacional de Incentivo a la Investigación" (dato
+erróneo que yo mismo había puesto) — es el código de convocatoria "Proyectos de Investigación" dentro
+del **Programa PROCIENCIA** de CONACYT (fondos FEEI), el mismo programa marco que financia ARASY
+(código ESTR = "Proyectos Estratégicos"). **PRONII es un programa totalmente distinto** (categoriza/
+incentiva a investigadores individuales, no financia proyectos) — no corresponde usar su logo acá.
+Logos correctos para PINV01-530 y ARASY ESTR01-23: **CONACYT + PROCIENCIA** (no PRONII). Ya corregido
+el texto de Agradecimientos y los comentarios de logos en el `.tex` local — falta reflejar el cambio
+en Overleaf (usuario edita ahí directamente ahora).
 
 **2026-09-20 (PC de escritorio):** Se resolvió lo pendiente del 17 de sept:
 1. Commit `baae411` (CLAUDE.md, .gitignore, settings.json, INDICE_PAPERS.md) commiteado y pusheado.
