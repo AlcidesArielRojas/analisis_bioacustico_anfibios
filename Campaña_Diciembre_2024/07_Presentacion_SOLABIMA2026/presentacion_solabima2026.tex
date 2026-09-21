@@ -1,0 +1,394 @@
+% ============================================================
+% Presentación oral tentativa --- SOLABIMA 2026
+% Biodiversidad en paisajes sonoros: detección de señales
+% bioacústicas mediante aprendizaje automático no supervisado
+%
+% NOTA: presentación TENTATIVA. Autores/afiliaciones se dejaron
+% como placeholder editable (ver \author y \institute abajo) --
+% no se copiaron del resumen enviado a SOLABIMA a propósito.
+% Grabadora corregida a Wildlife Acoustics Song Meter Micro 2
+% (el resumen enviado decía "AudioMoth", dato desactualizado;
+% la versión correcta está en el documento técnico/personal).
+% ============================================================
+
+\documentclass[11pt, aspectratio=169]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish, es-tabla]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+
+% ---------- Tema: formal, sobrio, académico ----------
+\usetheme{Madrid}
+\usecolortheme{seahorse}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamercovered{transparent}
+
+% ---------- Datos de la charla (EDITAR) ----------
+\title[Paisajes sonoros \& aprendizaje no supervisado]{%
+  Biodiversidad en paisajes sonoros: detección de señales\\
+  bioacústicas mediante aprendizaje automático no supervisado}
+\subtitle{Prueba de concepto --- Reserva Natural Tapytá, Paraguay}
+
+% TODO: completar autores/afiliaciones definitivos antes de enviar
+\author[A.~Rojas et al.]{Alcides Rojas \and colaboradores}
+\institute[]{Facultad Politécnica, Universidad Nacional de Asunción\\
+  \textit{colaboración con Fundación Moisés Bertoni y otras instituciones}}
+\date{SOLABIMA 2026}
+
+\begin{document}
+
+% ============================================================
+\begin{frame}
+  \titlepage
+  % TODO: logos institucionales (subir archivos a una carpeta logos/ y descomentar).
+  % ARASY no tiene logo propio (confirmado por el usuario y por conacyt.gov.py/arasy).
+  % Sugeridos: CONACYT Paraguay (financia PINV01-530 y ARASY ESTR01-23),
+  % FP-UNA/NIDTEC (institucion ejecutora), Fundacion Moises Bertoni, SOLABIMA.
+  % \begin{center}
+  %   \includegraphics[height=1cm]{logos/logo_conacyt.png}\hspace{1em}
+  %   \includegraphics[height=1cm]{logos/logo_fpuna.png}\hspace{1em}
+  %   \includegraphics[height=1cm]{logos/logo_fmb.png}
+  % \end{center}
+\end{frame}
+% ============================================================
+
+% ============================================================
+\begin{frame}{Contexto y motivación}
+% ============================================================
+  \begin{itemize}
+    \item El \textbf{monitoreo acústico pasivo (PAM)} genera volúmenes de audio
+      que superan la capacidad de análisis manual o convencional.
+    \item El paisaje sonoro (\textit{soundscape}) puede funcionar como
+      \textbf{proxy de biodiversidad}: refleja la actividad de especies
+      vocalmente activas sin necesidad de identificación experta previa.
+    \item \textbf{Pregunta:} ¿puede el aprendizaje no supervisado detectar y
+      caracterizar señales bioacústicas relevantes sin etiquetas previas?
+  \end{itemize}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Objetivo}
+% ============================================================
+  \begin{block}{Objetivo general}
+    Evaluar el potencial del aprendizaje no supervisado para detectar y
+    caracterizar señales acústicas como proxy de biodiversidad, como prueba
+    de concepto (PoC) en un subconjunto del monitoreo de la Reserva Natural
+    Tapytá.
+  \end{block}
+  \vspace{0.5em}
+  \begin{itemize}
+    \item Identificar agrupamientos acústicos (clusters) sin supervisión.
+    \item Comparar la complejidad acústica entre hábitats.
+    \item Caracterizar patrones espaciotemporales de vocalización de anfibios.
+  \end{itemize}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Área de estudio}
+% ============================================================
+  \begin{columns}[T]
+    \begin{column}{0.55\textwidth}
+      \textbf{Reserva Natural Tapytá}\\
+      Bosque Atlántico del Alto Paraná, Paraguay
+      \vspace{0.5em}
+      \begin{itemize}
+        \item 20 sitios en 3 hábitats:
+          \begin{itemize}
+            \item Bosque (BO, $n=10$)
+            \item Eucaliptal (EU, $n=5$)
+            \item Pastizal (PA, $n=5$)
+          \end{itemize}
+        \item Campaña: 11~nov -- 8~dic 2024 (temporada húmeda subtropical,
+          inicio de vocalización de anfibios).
+        \item Ventana horaria analizada: 18:00--06:00~h.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \centering
+      % TODO: reemplazar por mapa de sitios si se dispone de uno
+      \textit{[Mapa de sitios --- pendiente]}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Datos}
+% ============================================================
+  \begin{itemize}
+    \item Grabadoras \textbf{Wildlife Acoustics Song Meter Micro~2}
+      (WAV, 24{,}000~Hz, mono, 24~bits), activación horaria automática.
+    \item $\approx$1{,}852{,}000 segmentos de 4~s (2~s de solapamiento)
+      tras el filtro horario.
+    \item Volumen total de referencia del estudio completo:
+      $\sim$20~TB ($>$10 años de audio en tiempo real, múltiples sitios) ---
+      esta PoC usa una submuestra (campaña nov--dic 2024).
+  \end{itemize}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Metodología --- pipeline}
+% ============================================================
+  \centering
+  \begin{tikzpicture}[
+      node distance=6mm and 6mm,
+      box/.style={rectangle, draw, rounded corners, align=center,
+                  minimum height=1.1cm, text width=2.5cm, font=\scriptsize,
+                  fill=blue!8},
+      arr/.style={-{Stealth[length=2mm]}, thick}
+    ]
+    \node[box] (seg) {Segmentación\\4~s / 2~s solap.};
+    \node[box, right=of seg] (aten) {Atenuación\\adaptativa\\insectos (6--12~kHz)};
+    \node[box, right=of aten] (mfcc) {MFCC\\(20 coef.)};
+    \node[box, right=of mfcc] (pca) {RobustScaler\\+ PCA (95\%)};
+    \node[box, right=of pca] (umap) {UMAP\\$\mathbb{R}^d \to \mathbb{R}^3$};
+    \node[box, right=of umap] (hdb) {HDBSCAN\\clustering};
+
+    \draw[arr] (seg) -- (aten);
+    \draw[arr] (aten) -- (mfcc);
+    \draw[arr] (mfcc) -- (pca);
+    \draw[arr] (pca) -- (umap);
+    \draw[arr] (umap) -- (hdb);
+  \end{tikzpicture}
+
+  \vspace{1em}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{UMAP}
+      \begin{itemize}\footnotesize
+        \item \texttt{n\_neighbors} = 60
+        \item \texttt{min\_dist} = 0{,}3
+        \item métrica: coseno
+        \item 3 componentes
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{HDBSCAN}
+      \begin{itemize}\footnotesize
+        \item \texttt{min\_cluster\_size} = 800
+        \item \texttt{min\_samples} = 65
+        \item \texttt{epsilon} = 0{,}03
+        \item método EOM
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Refinamiento jerárquico}
+% ============================================================
+  \begin{itemize}
+    \item Un cluster es candidato a subdivisión si:
+      $n \geq 1{,}000$ segmentos, distancia media al centroide UMAP
+      $\bar{d} \geq 0{,}8$, y percentil 90 $\geq 1{,}2$.
+    \item \textbf{161 de 265 clusters (66{,}8\%)} fueron refinados,
+      revelando subgrupos heterogéneos dentro de agrupamientos iniciales.
+  \end{itemize}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.75\textwidth]{figs/FigC_Subclustering_AntesDespues.jpg}
+    \caption{\footnotesize Cluster 0 de PA-17 antes/después del subclustering.}
+  \end{figure}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Verificación de consistencia \textnormal{\small(en revisión)}}
+% ============================================================
+  % TODO (pendiente esta semana): decidir si esto entra en la presentación.
+  % Corresponde a Figura 5 (FigF1_Centroides_7subclusters, guia personal) y
+  % Figura 8 (FigG1_Centroides_8clusters, guia personal) del documento tecnico/
+  % personal: demasiados espectrogramas acumulados en un solo grafico y poca
+  % diferencia visible entre ellos. Se deja el espacio de la figura vacio a
+  % proposito hasta mejorar/simplificar el grafico o decidir si vale la pena.
+  \begin{itemize}
+    \item Los 7 sub-clusters del Cluster~0 muestran patrones espectrales
+      heterogéneos (mezcla variable de vocalización de anfibio y coro de
+      insectos).
+    \item Los mismos tipos acústicos (vocalización de anfibio, coro de
+      insectos) se reconocen de forma consistente en los tres hábitats
+      (PA-17, EU-16, BO-31) --- evidencia de que el pipeline captura tipos
+      sonoros reales, no artefactos de un sitio particular.
+  \end{itemize}
+  \vspace{1em}
+  \begin{center}
+    \fbox{\parbox{0.8\textwidth}{\centering\vspace{2em}
+      \textit{[Figura pendiente de revisión --- ver nota de sesión]}
+      \vspace{2em}}}
+  \end{center}
+  % \includegraphics[width=0.75\textwidth]{figs/FigF1_Centroides_7subclusters.jpg}
+  % \includegraphics[width=0.75\textwidth]{figs/FigG1_Centroides_8clusters.jpg}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Resultados globales}
+% ============================================================
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{lcccc}
+      \toprule
+      \textbf{Hábitat} & \textbf{Clusters/sitio} & \textbf{\% ruido} & \textbf{Silueta} & \textbf{Davies--Bouldin} \\
+      \midrule
+      Pastizal   & 33{,}2 & 21{,}0\% & 0{,}437 & 0{,}810 \\
+      Bosque     &  8{,}1 &  3{,}1\% & 0{,}368 & 0{,}643 \\
+      Eucaliptal &  3{,}6 &  0{,}0\% & 0{,}404 & 0{,}505 \\
+      \midrule
+      \textbf{Global (265 clusters)} & \multicolumn{3}{l}{silueta 0{,}394 \quad ruido 6{,}8\%} & \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.7\textwidth]{figs/FigD_Violin_Comparacion_Habitats.jpg}
+  \end{figure}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Diversidad acústica: marco metodológico}
+% ============================================================
+  Para cada sitio $s$ con $n_s$ segmentos y abundancias relativas
+  $q_{k,s} = n_{k,s}/n_s$ por tipo acústico $k$:
+  \begin{block}{Riqueza}
+    $R_s = |K_s|$ \quad (número de tipos acústicos distintos --- valores ya
+    mostrados en la tabla de la diapositiva anterior)
+  \end{block}
+  \begin{block}{Entropía (Shannon)}
+    $\displaystyle H_s = -\sum_{k \in K_s} q_{k,s} \log q_{k,s}$
+  \end{block}
+  \vspace{0.3em}
+  Las diferencias entre hábitats se evalúan mediante \textbf{pruebas de
+  permutación} (10.000 réplicas) de $R_s$, $H_s$, $D_s$ (dominancia).
+
+  \vspace{0.5em}
+  {\footnotesize \textit{Nota: $R_s$ corresponde a los valores ya reportados;
+  el cálculo de $H_s$/$D_s$ y el resultado formal de la prueba de permutación
+  quedan pendientes (no están aún en el pipeline procesado).}\par}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Estructura del espacio acústico (UMAP)}
+% ============================================================
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.95\textwidth]{figs/FigA_UMAP_Panel_3Habitats.jpg}
+    \caption{\footnotesize Proyecciones UMAP 2D --- PA-17 (pastizal), EU-16
+      (eucaliptal), BO-31 (bosque). Gris = ruido HDBSCAN.}
+  \end{figure}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Caso de estudio: PA-17 (pastizal)}
+% ============================================================
+  \small
+  \begin{table}
+    \centering
+    \footnotesize
+    \begin{tabular}{clc}
+      \toprule
+      \textbf{Cluster} & \textbf{Categoría} & \textbf{$N$ segs.} \\
+      \midrule
+      Cl.\,1--3 & Vocalización de anfibio & 1{,}450 / 1{,}454 / 5{,}809 \\
+      Cl.\,39   & Canto de ave & 3{,}528 \\
+      Cl.\,17   & Coro de insectos & 10{,}884 \\
+      Cl.\,38   & Lluvia / tormenta & 1{,}413 \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.85\textwidth]{figs/FigB_Panel_Espectrogramas_4Arquetipos.jpg}
+  \end{figure}
+  {\footnotesize Identificación por inspección espectral/auditiva con
+  señuelos etiquetados, según marco de Thomas et al. (2022).\par}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Hallazgo principal: partición temporal del nicho acústico}
+% ============================================================
+  \begin{itemize}
+    \item Tres clusters de vocalización de anfibio en PA-17,
+      \textbf{espectralmente equivalentes} ($f_{\text{dom}} \approx 2{,}850$~Hz,
+      BW $\approx$ 1{,}400--3{,}200~Hz).
+    \item \textbf{Segregación temporal escalonada:} picos a las
+      \textbf{18:00, 21:00 y 00:00~h}.
+    \item Consistente con partición temporal del nicho acústico descrita
+      en anuros del Bosque Atlántico brasileño (Donnelly et al., 2026).
+  \end{itemize}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.85\textwidth]{figs/FigJ_Actividad_Temporal_PA17.jpg}
+  \end{figure}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Equivalencia espectral, divergencia temporal}
+% ============================================================
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{figs/FigK_Comparacion_Espectral_Anfibios_PA17.jpg}
+    \caption{\footnotesize Huellas espectrales de los tres clusters de
+      anfibio: prácticamente idénticas. La diferencia está en el patrón
+      temporal, no en el contenido espectral.}
+  \end{figure}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Conclusiones}
+% ============================================================
+  \begin{enumerate}
+    \item El pipeline no supervisado (MFCC + PCA + UMAP + HDBSCAN) produce
+      clustering robusto en 20 sitios, sin ajuste manual por sitio.
+    \item La complejidad acústica difiere marcadamente entre hábitats:
+      pastizal $\gg$ bosque $\gg$ eucaliptal --- posible señal de
+      empobrecimiento en monocultivo.
+    \item Evidencia de \textbf{partición temporal del nicho acústico} entre
+      clusters de anfibio espectralmente equivalentes.
+    \item La similitud espectral no implica equivalencia temporal: el
+      análisis combinado es necesario para caracterizar los grupos acústicos.
+    \item El aprendizaje no supervisado muestra potencial claro para estudios
+      tempranos de paisajes sonoros a gran escala.
+  \end{enumerate}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Agradecimientos}
+% ============================================================
+  \begin{itemize}
+    \item Financiamiento: \textbf{CONACYT Paraguay} --- Programa Nacional de
+      Incentivo a la Investigación (\textbf{PINV01-530}) y proyecto
+      estratégico \textbf{ARASY} (ESTR01-23): \textit{``Potenciamiento de las
+      capacidades de modelamiento matemático computacional para la tierra y
+      la vida''} (Programa PROCIENCIA~II / FEEI, ejecutado por FP-UNA/NIDTEC).
+    \item Colaboración: Fundación Moisés Bertoni y equipo de campo en
+      Reserva Natural Tapytá.
+    \item Código disponible en:\\
+      \url{https://github.com/AlcidesArielRojas/analisis_bioacustico_anfibios}
+  \end{itemize}
+  \vspace{1em}
+  % TODO: logos institucionales (misma carpeta logos/ que la portada).
+  % ARASY no tiene logo propio (confirmado) -> se representa con el logo de
+  % CONACYT (financia PINV y ARASY) y el de FP-UNA/NIDTEC (institucion ejecutora).
+  % \begin{center}
+  %   \includegraphics[height=1cm]{logos/logo_conacyt.png}\hspace{1em}
+  %   \includegraphics[height=1cm]{logos/logo_fpuna.png}\hspace{1em}
+  %   \includegraphics[height=1cm]{logos/logo_fmb.png}\hspace{1em}
+  %   \includegraphics[height=1cm]{logos/logo_solabima.png}
+  % \end{center}
+\end{frame}
+
+% ============================================================
+\begin{frame}
+  \centering
+  \Large \textbf{¡Gracias!}\\[1em]
+  \normalsize Preguntas y comentarios
+\end{frame}
+% ============================================================
+
+\end{document}

@@ -326,6 +326,61 @@ Xu 2025, Canas 2023, Frasier 2021, Aide 2013.
 
 ### 📝 Notas de sesión (más reciente primero)
 
+**2026-09-20 (PC de escritorio), cierre de sesión:** Presentación
+`presentacion_solabima2026.tex` ya **subida a Overleaf y compartida con Pastor** para revisión. Estado
+al cerrar:
+- 16 diapositivas: contexto, objetivo, área de estudio, datos (grabadora corregida), pipeline,
+  subclustering, diversidad acústica (marco metodológico $R_s$/$H_s$/permutación, sin valores
+  inventados), resultados globales, UMAP, caso PA-17 (con cita Thomas et al. 2022), verificación de
+  consistencia (vacía a propósito — Fig 5/8 del doc. personal), hallazgo temporal, comparación
+  espectral, conclusiones, agradecimientos (CONACYT + ARASY con nombre completo confirmado), cierre.
+- **Pendiente para el usuario (no bloqueante):** subir archivos de logo reales (CONACYT, FP-UNA/NIDTEC,
+  Fundación Moisés Bertoni, SOLABIMA) a una carpeta `logos/` en Overleaf y descomentar las líneas
+  `\includegraphics` marcadas `% TODO` en portada y agradecimientos.
+- **Pendiente para otra sesión:** (1) decidir si mejorar/incluir Fig 5 y Fig 8 (grillas de
+  espectrogramas) o descartarlas — diapositiva placeholder ya lista para completar o eliminar;
+  (2) calcular $H_s$/$D_s$ reales y la prueba de permutación (ver nota anterior — requiere leer
+  `Fase_4_2_Subclustering_jerarquico_automático_dentro_de_clusters.py` para reconstruir el ID de
+  cluster final antes de calcular, y verificar que dé 265 clusters en total).
+- Nada del pipeline/análisis de datos se tocó hoy — todo el trabajo fue de la presentación.
+
+**2026-09-20 (PC de escritorio), continuación — presentación SOLABIMA:** Se creó
+`Campaña_Diciembre_2024/07_Presentacion_SOLABIMA2026/presentacion_solabima2026.tex` (Beamer, tema
+Madrid/seahorse) con una presentación oral tentativa, basada en el resumen enviado a SOLABIMA 2026 y
+en `documento_tecnico_paisajes_sonoros.tex` (para datos corregidos). **Ojo:** el resumen enviado dice
+grabadora "AudioMoth" — dato desactualizado; la presentación usa el dato correcto (Wildlife Acoustics
+Song Meter Micro 2) del documento técnico. Autores/afiliaciones quedaron como placeholder editable a
+propósito (no se copiaron del resumen). Figuras copiadas a `07_Presentacion_SOLABIMA2026/figs/` desde
+`06_Documento_Tecnico/figs_overleaf/` (mismas imágenes comprimidas ya usadas en el doc técnico).
+Sigue en revisión — es tentativa, se va a seguir ajustando diapositivas.
+
+**Ajuste posterior (mismo día):** se identificó que "Figura 5" y "Figura 8" del documento personal
+(`FigF1_Centroides_7subclusters` y `FigG1_Centroides_8clusters` — grillas con muchos espectrogramas,
+poca diferencia visible) no debían incluirse todavía. Se agregó una diapositiva "Verificación de
+consistencia (en revisión)" con el texto pero sin las imágenes (comentadas en el `.tex`, listas para
+descomentar cuando se decida). También se agregó cita a Thomas et al. (2022) que faltaba en la
+diapositiva de arquetipos PA-17 (el resumen SOLABIMA la menciona explícitamente).
+**Resuelto:** el usuario confirmó agregar las métricas formales de diversidad ($R_s$, $H_s$,
+permutación) y confirmó que Fig 5/8 son del documento personal. Se agregó la diapositiva "Diversidad
+acústica: marco metodológico" con las fórmulas. **Importante — hallazgo durante esto:** los valores
+reales de Entropía ($H_s$) y Dominancia ($D_s$) por sitio, y el resultado de la prueba de permutación
+de 10.000 réplicas, **no están calculados todavía** — confirmado que sigue como pendiente explícito en
+`RESUMEN_CAMPAÑA_DICIEMBRE_2024.md` ("Figura de diversidad por hábitat"). Los datos crudos para
+calcularlo existen (`resultados_HDD_Seagate/Campaña diciembre 2024/[sitio]/..._fase4_umap_hdbscan_
+subclusters.csv`, ~100k segmentos/sitio con `cluster_hdbscan` + `subcluster_id`), pero reconstruir el
+ID de cluster final (base+subcluster) que reconcilie exactamente con los "265 clusters" ya publicados
+requiere un análisis dedicado (no se improvisó para no arriesgar un número que contradiga lo ya
+publicado). **Pendiente real para otra sesión:** calcular $H_s$/$D_s$ y la permutación como script
+aparte, verificando que el total de clusters resultante siga dando 265 antes de reportar cualquier
+número nuevo.
+
+**ARASY confirmado (vía web):** nombre completo "ARASY: Potenciamiento de las capacidades de
+modelamiento matemático computacional para la tierra y la vida" (ESTR01-23), financiado por CONACYT
+vía PROCIENCIA II/FEEI, ejecutado por FP-UNA/NIDTEC. **No tiene logo propio** (confirmado por el
+usuario y por conacyt.gov.py/arasy) — se usa el logo de CONACYT + FP-UNA/NIDTEC en su lugar. Ya
+actualizado en la diapositiva de Agradecimientos del `.tex`. Sigue pendiente: el usuario debe subir
+los archivos de logo reales a una carpeta `logos/` para descomentar esas líneas.
+
 **2026-09-20 (PC de escritorio):** Se resolvió lo pendiente del 17 de sept:
 1. Commit `baae411` (CLAUDE.md, .gitignore, settings.json, INDICE_PAPERS.md) commiteado y pusheado.
 2. Se instaló `git-filter-repo` y se purgó de **toda la historia de git** (no de Dropbox — ningún
